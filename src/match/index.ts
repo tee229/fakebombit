@@ -137,28 +137,28 @@ function freeze<T>(value: T): T {
 
 function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, map: SemanticMap): { position: Position; heading: Direction | null } {
   const distance = rules.speed / rules.tickRate;
-  const axis = vectors[wanted].x === 0 ? 'x' : 'y';
-  if (actor.heading && vectors[actor.heading][axis] === 0) {
+  const alignmentAxis = vectors[wanted].x === 0 ? 'x' : 'y';
+  if (actor.heading && vectors[actor.heading][alignmentAxis] === 0) {
     return { position: moveAxis(actor.position, wanted, distance, map, rules.radius), heading: wanted };
   }
-  const nearest = Math.floor(actor.position[axis]) + 0.5;
-  const snapDistance = Math.abs(nearest - actor.position[axis]);
-  const snapped = { ...actor.position, [axis]: nearest };
-  const snapDirection = axis === 'x' ? (nearest >= actor.position.x ? 'right' : 'left') : (nearest >= actor.position.y ? 'down' : 'up');
+  const nearest = Math.floor(actor.position[alignmentAxis]) + 0.5;
+  const snapDistance = Math.abs(nearest - actor.position[alignmentAxis]);
+  const snapped = { ...actor.position, [alignmentAxis]: nearest };
+  const snapDirection = alignmentAxis === 'x' ? (nearest >= actor.position.x ? 'right' : 'left') : (nearest >= actor.position.y ? 'down' : 'up');
   const snapEnd = moveAxis(actor.position, snapDirection, snapDistance, map, rules.radius);
-  if (snapDistance <= rules.turnTolerance + 1e-10 && Math.abs(snapEnd[axis] - nearest) <= 1e-10 && (!actor.heading || canTurn(snapped, wanted, map, rules.radius))) {
+  if (snapDistance <= rules.turnTolerance + 1e-10 && Math.abs(snapEnd[alignmentAxis] - nearest) <= 1e-10 && (!actor.heading || canTurn(snapped, wanted, map, rules.radius))) {
     return { position: moveAxis(snapped, wanted, distance, map, rules.radius), heading: wanted };
   }
   const heading = actor.heading;
-  const sign = heading ? vectors[heading][axis] : 0;
-  let center = sign < 0 ? Math.floor(actor.position[axis] - 0.5 + 1e-10) + 0.5 : Math.ceil(actor.position[axis] - 0.5 - 1e-10) + 0.5;
-  const limit = axis === 'x' ? map.width : map.height;
+  const sign = heading ? vectors[heading][alignmentAxis] : 0;
+  let center = sign < 0 ? Math.floor(actor.position[alignmentAxis] - 0.5 + 1e-10) + 0.5 : Math.ceil(actor.position[alignmentAxis] - 0.5 - 1e-10) + 0.5;
+  const limit = alignmentAxis === 'x' ? map.width : map.height;
   while (center > 0 && center < limit) {
-    const travel = Math.abs(center - actor.position[axis]);
+    const travel = Math.abs(center - actor.position[alignmentAxis]);
     if (travel > distance + 1e-10 || (!heading && travel > 1e-10)) break;
-    const aligned = { ...actor.position, [axis]: center };
+    const aligned = { ...actor.position, [alignmentAxis]: center };
     const reached = heading ? moveAxis(actor.position, heading, travel, map, rules.radius) : actor.position;
-    if (Math.abs(reached[axis] - center) > 1e-10) break;
+    if (Math.abs(reached[alignmentAxis] - center) > 1e-10) break;
     if (canTurn(aligned, wanted, map, rules.radius)) {
       return { position: moveAxis(aligned, wanted, Math.max(0, distance - travel), map, rules.radius), heading: wanted };
     }
