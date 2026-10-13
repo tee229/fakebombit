@@ -4,7 +4,9 @@ Issues #3–#5 implement a headless movement and bomb prototype on a fixed seman
 
 ## Run
 
-Browser task #6 is in progress. Its current slice installs Vite 8.3.4 and Phaser 3.90.0 and displays the fixed semantic training map in a texture-free Entities View. Keyboard input and fixed-step flow are not connected in this intermediate slice; their test seams and the code-review baseline are awaiting user confirmation. Run `pnpm dev` for the canvas preview. The production browser build is written to `dist/web`; `pnpm preview` serves it after a build. Headless output remains in `dist/match` and `dist/demo`.
+Run `pnpm dev` and open <http://127.0.0.1:5173/> to play the fixed-map keyboard training arena. Use **WASD / arrow keys** to move, **Space** to place a bomb, and **R** to retry the same match. The three numbered opponents are stationary training targets; AI, touch controls, and the full menu flow belong to later tickets. The canvas shows current walls, breakable blockers, actors, bombs, active fire, event history, countdown, and result without a theme or image pack.
+
+The browser uses Vite **8.3.4** and Phaser **3.90.0**, verified against the npm registry and official documentation during implementation. Phaser 3 supplies Canvas/WebGL rendering and the documented scene/scale interfaces; the registry's current Phaser 4 release was also checked. `pnpm build` writes the production browser build to `dist/web`; `pnpm preview` serves it on <http://127.0.0.1:4173/>. Headless output remains in `dist/match` and `dist/demo`.
 
 Use Node 24.12 or newer and pnpm 10.27.0.
 
@@ -19,7 +21,7 @@ node dist/demo/bombs.js
 node dist/demo/chain-reactions.js
 ```
 
-`pnpm check` runs both TypeScript checks, behavioral tests, the architecture guard, and the build. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required.
+`pnpm check` runs all three TypeScript checks, behavioral tests, the architecture guard, and both builds. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required for those demos or rule tests.
 
 ## Public match contract
 
@@ -107,4 +109,18 @@ Before arbitration, placement filters eliminated actors, full capacities, and oc
 
 The guard is deliberately conservative: aliasing the entire `Math` object, using host globals in types, or accessing runtime module metadata is rejected. It is an architecture regression check combined with core typechecking, not a sandbox for adversarial JavaScript.
 
-AI, map generation, Phaser, and UI remain later tickets.
+## Browser input, flow, and interpolation
+
+`src/browser/main.ts` is the composition root. It creates the match, keyboard input, game session, and Phaser view; the session exclusively advances its match through the three existing public operations. The renderer only reads frozen state and ordered events. Browser types use a separate TypeScript configuration; the match still checks with ES2023 only, without DOM/Node/engine types.
+
+The keyboard interface owns held keys and a pending bomb action. The most recently pressed held direction wins, and releasing it restores another held direction. Automatic repeats never re-order directions or queue another bomb. A pending bomb survives render frames without a logical step and is consumed once on the first executed step, while movement continues through catch-up steps. Multiple taps before consumption coalesce into one pending action. Blur clears input; restart creates fresh input, match, session, view, and event-consumption context. Scene shutdown and destruction remove the browser listeners and view objects.
+
+`createGameSession(match, input).advanceFrame(deltaMs)` owns the accumulator. It accepts finite, nonnegative milliseconds from the browser loop and returns frozen world, events, interpolation `alpha`, executed `steps`, and `droppedTimeMs`. It never reads the clock itself. At most **5 logical steps per render frame** run. At the default 60 Hz this is 83.33 ms of work; additional whole-step backlog is discarded while the fractional remainder is preserved. Foreground stalls deliberately slow game time instead of creating an unbounded catch-up burst. The policy is verified with a 1000 ms stall: 5 steps execute, 916.67 ms is discarded, and the next zero-duration frame does not keep catching up.
+
+Normal 30/60/120 FPS frame sequences all advance 60 ticks, 3 cells, and the same bomb deadline per second. The view interpolates copies of positions between the two logical snapshots; it never overwrites either position. Terminal frames use the final logical position, stop all future stepping, and do not repeat ending events. The view's per-instance `(tick, order)` cursor prevents repeated presentation of an event; retries reset it. Canvas data attributes expose read-only observability for tick, player position, bomb/fire counts, result, and consumed-event count.
+
+For rendering-frequency checks, open `/?fps=30`, `/?fps=60`, or `/?fps=120`. These debug overrides change Phaser's render scheduling only, with unsmoothed elapsed frame time supplied to the session. Default rendering uses requestAnimationFrame. Complete pause/background/manual-resume behavior is the scope of #7; this slice clears keyboard input on blur.
+
+The user confirmed the keyboard-intent and game-session frame seams as tests, and selected commit `b1986ee` as this task's review baseline. Game-flow tests use real input and real matches rather than internal mocks. Core movement/bomb/chain checks remain unchanged.
+
+AI, generated maps, touch controls, themes/skins, and the full game flow remain later tickets.

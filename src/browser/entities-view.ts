@@ -21,6 +21,7 @@ export class EntitiesView {
   private readonly resultTitle: Phaser.GameObjects.Text;
   private readonly changes: string[] = [];
   private cursor = { tick: -1, order: -1 };
+  private consumedEvents = 0;
 
   constructor(private readonly scene: Phaser.Scene, world: WorldState) {
     this.root = scene.add.container();
@@ -61,6 +62,7 @@ export class EntitiesView {
     for (const event of events) {
       if (event.tick < this.cursor.tick || (event.tick === this.cursor.tick && event.order <= this.cursor.order)) continue;
       this.cursor = { tick: event.tick, order: event.order };
+      this.consumedEvents += 1;
       const seconds = (event.tick / world.initialization.rules.tickRate).toFixed(1);
       const descriptions: Record<GameplayEvent['type'], string> = {
         'bomb-placed': '放下炸弹', 'bomb-exploded': '炸弹引爆', 'blocker-destroyed': '障碍被炸开',
@@ -128,6 +130,7 @@ export class EntitiesView {
     this.timer.setText(`${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`);
     this.result.setVisible(world.result !== null);
     if (world.result) this.resultTitle.setText({ won: '练习完成', lost: '被炸中了', draw: '时间到' }[world.result.outcome]);
+    this.scene.game.canvas.dataset.consumedEvents = String(this.consumedEvents);
   }
 
   destroy(): void { this.root.destroy(true); }
