@@ -70,13 +70,14 @@ test('rejects malformed bomb input atomically and rejects invalid capacity confi
   }
 });
 
-test('does not choose an arbitrary winner for simultaneous same-cell requests before the arbitration task', () => {
+test('places exactly one bomb for simultaneous same-cell requests', () => {
   const match = createMatch({ ...config, actors: [config.actors[0]!, { ...config.actors[1]!, spawnId: 'start' }] });
   expect(match.advanceTick([
     { actorId: 'enemy', move: null, bomb: true },
     { actorId: 'player', move: null, bomb: true },
-  ])).toEqual([]);
-  expect(match.readWorld().bombs).toEqual([]);
+  ])).toHaveLength(1);
+  expect(match.readWorld().bombs).toHaveLength(1);
+  expect(['player', 'enemy']).toContain(match.readWorld().bombs[0]?.ownerId);
 });
 
 test('rounds seconds upward and exposes fire only on its half-open logical-tick interval', () => {

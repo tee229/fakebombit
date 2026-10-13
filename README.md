@@ -1,6 +1,6 @@
 # Fake Bomb It
 
-Issues #3 and #4 implement a headless movement and basic-bomb prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or random-number calls in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
+Issues #3–#5 implement a headless movement and bomb prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run
 
@@ -11,11 +11,13 @@ pnpm install --frozen-lockfile
 pnpm check
 pnpm demo
 pnpm demo:bombs
+pnpm demo:chains
 node dist/demo/movement.js
 node dist/demo/bombs.js
+node dist/demo/chain-reactions.js
 ```
 
-`pnpm check` runs both TypeScript checks, behavioral tests, the architecture guard, and the build. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. No rendering environment is required.
+`pnpm check` runs both TypeScript checks, behavioral tests, the architecture guard, and the build. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required.
 
 ## Public match contract
 
@@ -54,7 +56,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `basic-bombs-v2`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions, including the earlier placement-only implementation, are rejected. A seed is retained as match identity; this fixed-map slice consumes no randomness. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `chain-bombs-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions, including earlier movement/basic-bomb implementations, are rejected. The seed initializes a dedicated placement-arbitration stream. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -87,9 +89,15 @@ Every actor overlapping a newly placed bomb may leave; the bomb's `exitActorIds`
 
 One hit eliminates an actor. Eliminated actors retain their identity and final position, but cannot move or place bombs. With `playerId`, result priority is player death → loss, surviving player with no surviving opponents → win, otherwise reaching the time limit → draw. Result and a `match-ended` event appear in that same tick. Later `advanceTick` calls return no events and leave the entire world frozen, including bomb/fire timers.
 
-Events are frozen, carry their logical `tick` and zero-based per-step `order`, and follow phase order: `bomb-placed`, `bomb-exploded`, `blocker-destroyed`, `actor-eliminated`, `match-ended`. Placement uses actor-ID order, explosions use bomb creation order, destruction uses blocker-ID order, and elimination uses configured actor order. Hazard expiration is reflected in state rather than a separate event. Use a new match instance for retries and distinguish instances when consuming events.
+Events are frozen, carry their logical `tick` and zero-based per-step `order`, and follow phase order: `bomb-placed`, `bomb-exploded`, `blocker-destroyed`, `actor-eliminated`, `match-ended`. Placement uses row-major cell order (y, then x), explosions use lexicographic bomb-ID order after collecting the full chain, destruction uses blocker-ID order, and elimination uses actor-ID order. Identity comparisons use JavaScript string order, not locale-dependent sorting. Hazard expiration is reflected in state rather than a separate event. Use a new match instance for retries and distinguish instances when consuming events.
 
-Same-cell conflicting placement requests are all skipped in this slice. Chain reactions and seeded same-cell arbitration belong to issue #5; known bombs currently explode only on their own fuse.
+## Chains and same-cell arbitration
+
+An explosion ignites every bomb on its fire cells in that same phase. Bombs touching fire already active at tick start also enter the phase, even if that fire expires at the step's end. The phase computes the entire chain against one surviving-blocker snapshot, deduplicates bomb identities, and only then creates hazards/events, destroys blockers, and settles eliminations. Cycles and multiple roots cannot explode a bomb twice. A breakable blocker destroyed by one explosion still blocks every other explosion in that phase; later ticks use the cleared world. Other bombs trigger chains without stopping a fire ray; walls remain the propagation blockers.
+
+Before arbitration, placement filters eliminated actors, full capacities, and occupied cells. Candidates are grouped by their start cell; groups run in row-major order and candidates use actor-ID order. Each contested group draws one winner; single valid requests need no random draw. Only successful placement consumes capacity. Leave permission belongs to every living actor overlapping the new bomb, including losers and actors that did not request placement.
+
+`arbitration.ts` owns one private, reproducible stream. Its seed is a UTF-16 FNV-1a hash of `fakebombit:placement-arbitration:v1` + a NUL separator + the match seed. A 32-bit LCG advances state; a bijective bit mixer removes raw low-bit patterns, and rejection sampling maps output to a candidate index without modulo bias. Other rule work, solo/invalid/occupied placement requests, snapshots, and presentation do not consume it. The algorithm, namespace, ordering, and consumption rules belong to `chain-bombs-v1`; changing them requires an implementation version change. Retry recreates the stream and replays inputs from initialization.
 
 ## Architecture guard
 

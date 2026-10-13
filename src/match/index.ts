@@ -1,3 +1,5 @@
+import { createArbitrationRandom } from './arbitration.js';
+
 export type Direction = 'up' | 'right' | 'down' | 'left';
 export interface Position {
   readonly x: number;
@@ -125,7 +127,7 @@ const defaults: MatchRules = {
   tickRate: 60, speed: 3, radius: 0.3, turnBufferTicks: 8, turnTolerance: 0.12,
   bombCapacity: 1, blastRange: 1, bombFuseSeconds: 3, fireDurationSeconds: 0.5, matchDurationSeconds: 120,
 };
-const versions = { match: 'basic-bombs-v2', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
+const versions = { match: 'chain-bombs-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
 const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 
 export function createMatch(config: MatchConfig): Match {
@@ -160,6 +162,7 @@ export function createMatch(config: MatchConfig): Match {
   let hazards: FireState[] = [];
   let blockers = [...map.blockers];
   let result: MatchResult | null = null;
+  const chooseIndex = createArbitrationRandom(initialization.seed);
   const entityIds = new Set([...map.blockers.map(wall => wall.id), ...config.actors.map(actor => actor.id)]);
   const pending = new Map<string, { direction: Direction; expires: number }>();
   let actors: ActorState[] = config.actors.map(actor => {
@@ -177,18 +180,26 @@ export function createMatch(config: MatchConfig): Match {
         && bombs.filter(bomb => bomb.ownerId === actor.id).length < rules.bombCapacity
         && !bombs.some(bomb => bomb.x === Math.floor(actor.position.x) && bomb.y === Math.floor(actor.position.y)))
         .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+      const groups = new Map<string, { cell: Position; candidates: ActorState[] }>();
       for (const actor of requests) {
         const cell = { x: Math.floor(actor.position.x), y: Math.floor(actor.position.y) };
-        // Same-cell arbitration belongs to issue #5; ambiguous requests all fail here.
-        if (requests.some(other => other.id !== actor.id && Math.floor(other.position.x) === cell.x && Math.floor(other.position.y) === cell.y)) continue;
+        const key = `${cell.x},${cell.y}`;
+        const group = groups.get(key) ?? { cell, candidates: [] };
+        group.candidates.push(actor);
+        groups.set(key, group);
+      }
+      for (const { cell, candidates } of [...groups.values()].sort((left, right) => left.cell.y - right.cell.y || left.cell.x - right.cell.x)) {
+        const actor = candidates[candidates.length === 1 ? 0 : chooseIndex(candidates.length)]!;
         let id: string;
         do { id = `bomb-${++bombSequence}`; } while (entityIds.has(id));
         entityIds.add(id);
-        const exitActorIds = actors.filter(other => overlapsCell(other.position, cell, rules.radius)).map(other => other.id);
+        const exitActorIds = actors.filter(other => other.alive && overlapsCell(other.position, cell, rules.radius)).map(other => other.id).sort();
         bombs = [...bombs, { id, type: 'bomb', ownerId: actor.id, ...cell, exitActorIds,
           placedAtTick: tick, detonateAtTick: tick + Math.ceil(rules.bombFuseSeconds * rules.tickRate) }];
         events.push({ type: 'bomb-placed', tick: tick + 1, order: events.length, bombId: id, actorId: actor.id, cell });
       }
+      // Fire active at tick start can ignite a bomb even if it expires at this step's end.
+      const burning = new Set(bombs.filter(bomb => hazards.some(hazard => hazard.cells.some(cell => cell.x === bomb.x && cell.y === bomb.y))).map(bomb => bomb.id));
       actors = actors.map(actor => {
         if (!actor.alive) return { ...actor, previousPosition: actor.position };
         const intent = intents.find(intent => intent.actorId === actor.id);
@@ -208,12 +219,14 @@ export function createMatch(config: MatchConfig): Match {
       });
       tick += 1;
       hazards = hazards.filter(hazard => hazard.expiresAtTick > tick);
-      const due = bombs.filter(bomb => bomb.detonateAtTick <= tick);
+      const scheduled = new Set(bombs.filter(bomb => bomb.detonateAtTick <= tick || burning.has(bomb.id)).map(bomb => bomb.id));
+      const exploded = new Map<string, Position[]>();
       const destroyed = new Set<string>();
-      for (const bomb of due) {
-        let id: string;
-        do { id = `fire-${++fireSequence}`; } while (entityIds.has(id));
-        entityIds.add(id);
+      while (scheduled.size > 0) {
+        const bombId = [...scheduled].sort()[0]!;
+        scheduled.delete(bombId);
+        if (exploded.has(bombId)) continue;
+        const bomb = bombs.find(bomb => bomb.id === bombId)!;
         const cells: Position[] = [{ x: bomb.x, y: bomb.y }];
         for (const vector of Object.values(vectors)) {
           for (let distance = 1; distance <= rules.blastRange; distance++) {
@@ -225,24 +238,37 @@ export function createMatch(config: MatchConfig): Match {
             if (wall) { destroyed.add(wall.id); break; }
           }
         }
-        hazards = [...hazards, { id, type: 'hazard.fire', bombId: bomb.id, cells,
-          createdAtTick: tick, expiresAtTick: tick + Math.ceil(rules.fireDurationSeconds * rules.tickRate) }];
-        events.push({ type: 'bomb-exploded', tick, order: events.length, bombId: bomb.id, hazardId: id, cells });
+        exploded.set(bomb.id, cells);
+        for (const other of bombs) {
+          if (!exploded.has(other.id) && cells.some(cell => cell.x === other.x && cell.y === other.y)) scheduled.add(other.id);
+        }
       }
-      bombs = bombs.filter(bomb => !due.includes(bomb));
+      for (const [bombId, cells] of [...exploded].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
+        let id: string;
+        do { id = `fire-${++fireSequence}`; } while (entityIds.has(id));
+        entityIds.add(id);
+        hazards = [...hazards, { id, type: 'hazard.fire', bombId, cells,
+          createdAtTick: tick, expiresAtTick: tick + Math.ceil(rules.fireDurationSeconds * rules.tickRate) }];
+        events.push({ type: 'bomb-exploded', tick, order: events.length, bombId, hazardId: id, cells });
+      }
+      bombs = bombs.filter(bomb => !exploded.has(bomb.id));
       for (const wall of blockers.filter(wall => destroyed.has(wall.id)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)) {
         events.push({ type: 'blocker-destroyed', tick, order: events.length, blockerId: wall.id });
       }
       blockers = blockers.filter(wall => !destroyed.has(wall.id));
+      const eliminated: { actorId: string; hazardId: string }[] = [];
       actors = actors.map(actor => {
         if (!actor.alive) return actor;
         const hazardId = damage.get(actor.id)
           ?? hazards.find(hazard => hazard.cells.some(cell => overlapsCell(actor.position, cell, rules.radius)))?.id;
         if (!hazardId) return actor;
         pending.delete(actor.id);
-        events.push({ type: 'actor-eliminated', tick, order: events.length, actorId: actor.id, hazardId });
+        eliminated.push({ actorId: actor.id, hazardId });
         return { ...actor, alive: false, heading: null };
       });
+      for (const elimination of eliminated.sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0)) {
+        events.push({ type: 'actor-eliminated', tick, order: events.length, ...elimination });
+      }
       if (initialization.playerId !== undefined) {
         const player = actors.find(actor => actor.id === initialization.playerId)!;
         const outcome = !player.alive ? 'lost'

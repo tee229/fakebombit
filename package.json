@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.build.json",
     "demo": "tsx src/demo/movement.ts",
     "demo:bombs": "tsx src/demo/bombs.ts",
+    "demo:chains": "tsx src/demo/chain-reactions.ts",
     "check:architecture": "tsx scripts/check-architecture.ts",
     "check": "pnpm typecheck && pnpm typecheck:core && pnpm test && pnpm check:architecture && pnpm build"
   },
