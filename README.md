@@ -2,6 +2,8 @@
 
 Issue #3 implements a headless movement prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or random-number calls in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
+Issue #4 is in progress. The current slice adds optional `bomb: true` intents, placement at the tick-start cell, frozen ordered placement events, positive-integer `bombCapacity` (default 1), and bomb collision. Every actor overlapping a newly placed bomb can leave it; the permission is removed after complete separation. Bomb entity identities are stable and distinct from actor/blocker identities. Same-cell conflicting requests are skipped together until issue #5 adds arbitration. Detonation, damage, and results are pending confirmation of the timing boundaries required by issue #4; bombs in this intermediate slice do not expire.
+
 ## Run
 
 Use Node 24.12 or newer and pnpm 10.27.0.
@@ -52,7 +54,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `movement-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions are rejected. A seed is retained as match identity; this fixed-map slice consumes no randomness. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `basic-bombs-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions are rejected. A seed is retained as match identity; this fixed-map slice consumes no randomness. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -71,4 +73,4 @@ Creation validation reports its first failure. Invalid tick intents reject the w
 
 The guard is deliberately conservative: aliasing the entire `Math` object, using host globals in types, or accessing runtime module metadata is rejected. It is an architecture regression check combined with core typechecking, not a sandbox for adversarial JavaScript.
 
-This milestone includes no bombs, AI, map generation, Phaser, or UI. Those remain later tickets.
+AI, map generation, Phaser, and UI remain later tickets.

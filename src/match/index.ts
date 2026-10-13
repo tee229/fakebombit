@@ -22,14 +22,30 @@ export interface MovementRules {
   readonly turnBufferTicks: number;
   readonly turnTolerance: number;
 }
+export interface MatchRules extends MovementRules { readonly bombCapacity: number }
 export interface MatchConfig {
   readonly seed: string;
   readonly map: SemanticMap;
   readonly actors: readonly ActorConfig[];
-  readonly rules?: Partial<MovementRules>;
+  readonly rules?: Partial<MatchRules>;
   readonly versions?: InitializationRecord['versions'];
 }
-export interface GameplayIntent { readonly actorId: string; readonly move: Direction | null }
+export interface GameplayIntent { readonly actorId: string; readonly move: Direction | null; readonly bomb?: boolean }
+export interface BombState extends Position {
+  readonly id: string;
+  readonly type: 'bomb';
+  readonly ownerId: string;
+  readonly exitActorIds: readonly string[];
+}
+export interface PlacementEvent {
+  readonly type: 'bomb-placed';
+  readonly tick: number;
+  readonly order: number;
+  readonly bombId: string;
+  readonly actorId: string;
+  readonly cell: Position;
+}
+export type GameplayEvent = PlacementEvent;
 export interface ActorState {
   readonly id: string;
   readonly type: 'actor';
@@ -39,7 +55,7 @@ export interface ActorState {
 }
 export interface InitializationRecord {
   readonly seed: string;
-  readonly rules: MovementRules;
+  readonly rules: MatchRules;
   readonly map: SemanticMap;
   readonly actors: readonly ActorConfig[];
   readonly versions: { readonly match: string; readonly map: string; readonly generator: string; readonly ai: string };
@@ -50,13 +66,14 @@ export interface WorldState {
   readonly initialMap: SemanticMap;
   readonly blockers: readonly Blocker[];
   readonly actors: readonly ActorState[];
+  readonly bombs: readonly BombState[];
 }
 export interface Match {
-  advanceTick(intents?: readonly GameplayIntent[]): readonly never[];
+  advanceTick(intents?: readonly GameplayIntent[]): readonly GameplayEvent[];
   readWorld(): WorldState;
 }
-const defaults: MovementRules = { tickRate: 60, speed: 3, radius: 0.3, turnBufferTicks: 8, turnTolerance: 0.12 };
-const versions = { match: 'movement-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
+const defaults: MatchRules = { tickRate: 60, speed: 3, radius: 0.3, turnBufferTicks: 8, turnTolerance: 0.12, bombCapacity: 1 };
+const versions = { match: 'basic-bombs-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
 const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 
 export function createMatch(config: MatchConfig): Match {
@@ -84,6 +101,9 @@ export function createMatch(config: MatchConfig): Match {
     versions,
   });
   let tick = 0;
+  let bombSequence = 0;
+  let bombs: BombState[] = [];
+  const entityIds = new Set([...map.blockers.map(wall => wall.id), ...config.actors.map(actor => actor.id)]);
   const pending = new Map<string, { direction: Direction; expires: number }>();
   let actors: ActorState[] = config.actors.map(actor => {
     const spawn = map.spawns.find(spawn => spawn.id === actor.spawnId)!;
@@ -93,6 +113,22 @@ export function createMatch(config: MatchConfig): Match {
   return {
     advanceTick(intents = []) {
       validateIntents(intents, actors);
+      const events: GameplayEvent[] = [];
+      const requests = actors.filter(actor => intents.some(intent => intent.actorId === actor.id && intent.bomb)
+        && bombs.filter(bomb => bomb.ownerId === actor.id).length < rules.bombCapacity
+        && !bombs.some(bomb => bomb.x === Math.floor(actor.position.x) && bomb.y === Math.floor(actor.position.y)))
+        .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+      for (const actor of requests) {
+        const cell = { x: Math.floor(actor.position.x), y: Math.floor(actor.position.y) };
+        // Same-cell arbitration belongs to issue #5; ambiguous requests all fail here.
+        if (requests.some(other => other.id !== actor.id && Math.floor(other.position.x) === cell.x && Math.floor(other.position.y) === cell.y)) continue;
+        let id: string;
+        do { id = `bomb-${++bombSequence}`; } while (entityIds.has(id));
+        entityIds.add(id);
+        const exitActorIds = actors.filter(other => overlapsCell(other.position, cell, rules.radius)).map(other => other.id);
+        bombs = [...bombs, { id, type: 'bomb', ownerId: actor.id, ...cell, exitActorIds }];
+        events.push({ type: 'bomb-placed', tick: tick + 1, order: events.length, bombId: id, actorId: actor.id, cell });
+      }
       actors = actors.map(actor => {
         const intent = intents.find(intent => intent.actorId === actor.id);
         if (intent?.move === null) pending.delete(actor.id);
@@ -101,18 +137,27 @@ export function createMatch(config: MatchConfig): Match {
         if (request && tick > request.expires) pending.delete(actor.id);
         const wanted = pending.get(actor.id)?.direction;
         if (!wanted) return { ...actor, previousPosition: actor.position, heading: null };
-        const moved = moveActor(actor, wanted, rules, map);
+        const collisionMap = { ...map, blockers: [...map.blockers, ...bombs.filter(bomb => !bomb.exitActorIds.includes(actor.id))] };
+        const moved = moveActor(actor, wanted, rules, collisionMap);
+        bombs = bombs.map(bomb => ({ ...bomb, exitActorIds: bomb.exitActorIds.filter(id => id !== actor.id || overlapsCell(moved.position, bomb, rules.radius)) }));
         if (moved.heading === wanted) pending.delete(actor.id);
         return { ...actor, ...moved, previousPosition: actor.position };
       });
       tick += 1;
-      return [];
+      return freeze(events);
     },
-    readWorld() { return freeze({ tick, initialization, initialMap: map, blockers: map.blockers, actors }); },
+    readWorld() { return freeze({ tick, initialization, initialMap: map, blockers: map.blockers, actors, bombs }); },
   };
 }
 
-function moveAxis(position: Position, direction: Direction, distance: number, map: SemanticMap, radius: number): Position {
+type CollisionMap = Pick<SemanticMap, 'width' | 'height'> & { readonly blockers: readonly Position[] };
+
+function overlapsCell(position: Position, cell: Position, radius: number): boolean {
+  return position.x + radius > cell.x && position.x - radius < cell.x + 1
+    && position.y + radius > cell.y && position.y - radius < cell.y + 1;
+}
+
+function moveAxis(position: Position, direction: Direction, distance: number, map: CollisionMap, radius: number): Position {
   const vector = vectors[direction];
   const axis = vector.x === 0 ? 'y' : 'x';
   const across = axis === 'x' ? 'y' : 'x';
@@ -135,7 +180,7 @@ function freeze<T>(value: T): T {
   return value;
 }
 
-function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, map: SemanticMap): { position: Position; heading: Direction | null } {
+function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, map: CollisionMap): { position: Position; heading: Direction | null } {
   const distance = rules.speed / rules.tickRate;
   const alignmentAxis = vectors[wanted].x === 0 ? 'x' : 'y';
   if (actor.heading && vectors[actor.heading][alignmentAxis] === 0) {
@@ -168,7 +213,7 @@ function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, m
   return { position: heading ? moveAxis(actor.position, heading, distance, map, rules.radius) : actor.position, heading };
 }
 
-function canTurn(position: Position, direction: Direction, map: SemanticMap, radius: number): boolean {
+function canTurn(position: Position, direction: Direction, map: CollisionMap, radius: number): boolean {
   const vector = vectors[direction];
   const x = Math.floor(position.x) + vector.x;
   const y = Math.floor(position.y) + vector.y;
@@ -208,12 +253,13 @@ function validateConfig(config: unknown): void {
     throw new MatchError('invalid-config', 'Movement rules must contain supported rule keys');
   }
 }
-function validateRules(rules: MovementRules): void {
+function validateRules(rules: MatchRules): void {
   if (!Number.isSafeInteger(rules.tickRate) || rules.tickRate <= 0) throw new MatchError('invalid-config', 'tickRate must be a positive safe integer');
   if (!Number.isFinite(rules.speed) || rules.speed <= 0) throw new MatchError('invalid-config', 'speed must be positive and finite');
   if (!Number.isFinite(rules.radius) || rules.radius <= 0 || rules.radius >= 0.5) throw new MatchError('invalid-config', 'radius must be between 0 and 0.5 cells');
   if (!Number.isSafeInteger(rules.turnBufferTicks) || rules.turnBufferTicks < 0) throw new MatchError('invalid-config', 'turnBufferTicks must be a nonnegative safe integer');
   if (!Number.isFinite(rules.turnTolerance) || rules.turnTolerance < 0 || rules.turnTolerance >= 0.5) throw new MatchError('invalid-config', 'turnTolerance must be at least 0 and less than 0.5 cells');
+  if (!Number.isSafeInteger(rules.bombCapacity) || rules.bombCapacity <= 0) throw new MatchError('invalid-config', 'bombCapacity must be a positive safe integer');
 }
 
 function validateMap(map: unknown, actors: readonly ActorConfig[]): void {
@@ -251,7 +297,8 @@ function validateIntents(intents: unknown, actors: readonly ActorState[]): void 
   const seen = new Set<string>();
   for (const intent of intents) {
     if (!isRecord(intent) || typeof intent.actorId !== 'string' || !actors.some(actor => actor.id === intent.actorId)
-      || seen.has(intent.actorId) || (intent.move !== null && (typeof intent.move !== 'string' || !Object.hasOwn(vectors, intent.move)))) {
+      || seen.has(intent.actorId) || (Object.hasOwn(intent, 'bomb') && typeof intent.bomb !== 'boolean')
+      || (intent.move !== null && (typeof intent.move !== 'string' || !Object.hasOwn(vectors, intent.move)))) {
       throw new MatchError('invalid-intent', 'Each known actor may submit one cardinal move or explicit null release per tick');
     }
     seen.add(intent.actorId);
