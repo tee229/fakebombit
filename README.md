@@ -4,6 +4,8 @@ Issues #3–#5 implement a headless movement and bomb prototype on a fixed seman
 
 ## Run
 
+Browser task #6 is in progress. Its current slice installs Vite 8.3.4 and Phaser 3.90.0 and displays the fixed semantic training map in a texture-free Entities View. Keyboard input and fixed-step flow are not connected in this intermediate slice; their test seams and the code-review baseline are awaiting user confirmation. Run `pnpm dev` for the canvas preview. The production browser build is written to `dist/web`; `pnpm preview` serves it after a build. Headless output remains in `dist/match` and `dist/demo`.
+
 Use Node 24.12 or newer and pnpm 10.27.0.
 
 ```sh

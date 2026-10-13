@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#102b2c" />
+    <meta name="description" content="Fake Bomb It 固定地图键盘训练场，展示独立游戏规则的实体视图。" />
+    <title>Fake Bomb It · 实体训练场</title>
+  </head>
+  <body>
+    <main id="game" aria-label="Fake Bomb It 实体训练场"></main>
+    <p id="instructions" class="sr-only">使用 WASD 或方向键移动，空格放弹，R 重试。炸弹三秒后爆炸，躲开十字火焰并淘汰三个静止目标。</p>
+    <p id="game-status" class="sr-only" role="status" aria-live="polite"></p>
+    <noscript>请启用 JavaScript 运行键盘训练场。</noscript>
+    <script type="module" src="/src/browser/main.ts"></script>
+  </body>
+</html>

@@ -10,24 +10,32 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "typecheck:core": "tsc -p tsconfig.core.json --noEmit",
+    "typecheck:browser": "tsc -p tsconfig.browser.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "tsc -p tsconfig.build.json",
+    "build:core": "tsc -p tsconfig.build.json",
+    "build": "pnpm build:core && vite build",
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
     "demo": "tsx src/demo/movement.ts",
     "demo:bombs": "tsx src/demo/bombs.ts",
     "demo:chains": "tsx src/demo/chain-reactions.ts",
     "check:architecture": "tsx scripts/check-architecture.ts",
-    "check": "pnpm typecheck && pnpm typecheck:core && pnpm test && pnpm check:architecture && pnpm build"
+    "check": "pnpm typecheck && pnpm typecheck:core && pnpm typecheck:browser && pnpm test && pnpm check:architecture && pnpm build"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "tsx": "4.23.15",
     "typescript": "6.0.3",
+    "vite": "8.3.4",
     "vitest": "5.0.4"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
   }
 }

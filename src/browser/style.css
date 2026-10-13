@@ -1,0 +1,14 @@
+:root {
+  color-scheme: dark;
+  background: #102b2c;
+  color: #e9f3ec;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100dvh; overflow: hidden; }
+#game { width: 100vw; height: 100dvh; }
+canvas { display: block; outline-offset: -4px; }
+canvas:focus-visible { outline: 3px solid #81e2be; }
+::selection { background: #81e2be; color: #102b2c; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+noscript { position: absolute; top: 2rem; left: 2rem; }
