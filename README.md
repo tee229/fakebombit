@@ -1,8 +1,6 @@
 # Fake Bomb It
 
-Issue #3 implements a headless movement prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or random-number calls in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
-
-Issue #4 is in progress. The current slice adds optional `bomb: true` intents, placement at the tick-start cell, frozen ordered placement events, positive-integer `bombCapacity` (default 1), and bomb collision. Every actor overlapping a newly placed bomb can leave it; the permission is removed after complete separation. Bomb entity identities are stable and distinct from actor/blocker identities. Same-cell conflicting requests are skipped together until issue #5 adds arbitration. Detonation, damage, and results are pending confirmation of the timing boundaries required by issue #4; bombs in this intermediate slice do not expire.
+Issues #3 and #4 implement a headless movement and basic-bomb prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or random-number calls in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run
 
@@ -12,25 +10,27 @@ Use Node 24.12 or newer and pnpm 10.27.0.
 pnpm install --frozen-lockfile
 pnpm check
 pnpm demo
+pnpm demo:bombs
 node dist/demo/movement.js
+node dist/demo/bombs.js
 ```
 
-`pnpm check` runs both TypeScript checks, behavioral tests, the architecture guard, and the build. The core typecheck uses only ES2023, with no DOM or Node types. The demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. No rendering environment is required.
+`pnpm check` runs both TypeScript checks, behavioral tests, the architecture guard, and the build. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. No rendering environment is required.
 
 ## Public match contract
 
 Import `createMatch` and the associated contracts from `src/match/index.ts` (or `dist/match/index.js` after building).
 
 ```ts
-const match = createMatch({ seed, map, actors, rules });
-const events = match.advanceTick([{ actorId: 'player', move: 'right' }]);
+const match = createMatch({ seed, map, actors, rules, playerId: 'player' });
+const events = match.advanceTick([{ actorId: 'player', move: 'right', bomb: true }]);
 const world = match.readWorld();
 const retry = createMatch(world.initialization);
 ```
 
-These are the three public operations: create a match, advance exactly one logical tick, and read its world. Callers submit cardinal gameplay intents (`up`, `right`, `down`, `left`) or `null` to release movement. They never coordinate internal rule updates. The movement-only slice returns an empty readonly event list; it does not invent movement events. Movement rules and initialization are frozen for each match.
+These are the three public operations: create a match, advance exactly one logical tick, and read its world. Callers submit cardinal gameplay intents (`up`, `right`, `down`, `left`) or `null` to release movement, with optional `bomb: true` for a one-step action. They never coordinate internal rule updates. Rules and initialization are frozen for each match. Specify `playerId` to enable victory, defeat, timeout, and terminal freeze; it must identify a configured actor and is recorded for retries. Omitting it retains the rules sandbox used by the movement demo, with no match result or timeout.
 
-A semantic map contains positive integer dimensions, row-major `floor` ground cells, separately identified `solid-wall` / `breakable-wall` blockers, and named spawn markers. Actors reference spawn markers and begin at cell centers `(cell.x + 0.5, cell.y + 0.5)`. Multiple actors may use the same spawn. Actors and blockers have unique stable entity identities; spawn marker identities are unique within their own namespace. Initial-map data stays unchanged, while current blockers and actors are exposed separately in the world snapshot. This slice has no obstacle destruction.
+A semantic map contains positive integer dimensions, row-major `floor` ground cells, separately identified `solid-wall` / `breakable-wall` blockers, and named spawn markers. Actors reference spawn markers and begin at cell centers `(cell.x + 0.5, cell.y + 0.5)`. Multiple actors may use the same spawn. Actors, blockers, bombs, and fire hazards have unique stable entity identities; spawn marker identities are unique within their own namespace. Initial-map data stays unchanged, while current blockers, actors, bombs, hazards, and result are exposed separately in the world snapshot.
 
 Positions are continuous cell units. Collision uses an axis-aligned square with a rule-defined half-width (`radius`), never sprite dimensions. Swept cardinal movement stops at map edges and blocker contact, including at speeds that cross several cells in one tick. Actors do not block each other. `previousPosition` and `position` provide consecutive tick positions for future presentation interpolation. Every snapshot and its nested data are frozen; subsequent ticks do not change earlier snapshots. Caller-owned configuration is copied rather than frozen or retained.
 
@@ -54,7 +54,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `basic-bombs-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions are rejected. A seed is retained as match identity; this fixed-map slice consumes no randomness. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `basic-bombs-v2`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Incompatible recorded versions, including the earlier placement-only implementation, are rejected. A seed is retained as match identity; this fixed-map slice consumes no randomness. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -66,6 +66,30 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 | `invalid-intent` | Invalid intent, unknown actor ID, or multiple intents for one actor in a tick |
 
 Creation validation reports its first failure. Invalid tick intents reject the whole tick before changing state. A tick accepts at most one intent per actor; ordering independent actors' intents does not affect movement.
+
+## Basic bombs and result rules
+
+These defaults are prototype values; the timing boundaries were explicitly confirmed by the user in [issue #4](https://github.com/tee229/fakebombit/issues/4#issuecomment-6145866090).
+
+| Rule | Default | Accepted range |
+| --- | --- | --- |
+| `bombCapacity` | 1 active bomb per actor | Positive safe integer |
+| `blastRange` | 1 cell in each cardinal direction | Positive safe integer |
+| `bombFuseSeconds` | 3 seconds | Positive finite duration resolving to safely representable ticks |
+| `fireDurationSeconds` | 0.5 seconds | Positive finite duration resolving to safely representable ticks |
+| `matchDurationSeconds` | 120 seconds | Positive finite duration resolving to safely representable ticks |
+
+Duration ticks are `ceil(seconds * tickRate)`. Bombs store `placedAtTick` and `detonateAtTick`; fire hazards store cells, `createdAtTick`, and exclusive `expiresAtTick`. A bomb placed at tick-start n with fuse F explodes in the explosion phase of n+F. Fire is active on `[explosionTick, explosionTick + fireTicks)`. Movement during the step ending at the expiration boundary still encounters the old fire; movement starting at or after expiration does not. New explosions damage only moved actor positions, without retroactive damage along that step's earlier path. All damage uses the same logical square collision size as movement, with edge contact alone excluded.
+
+Each tick validates input atomically, places bombs at start positions, moves actors and records contact with existing fire along the actual cardinal path (including turn segments), calculates all due explosions against phase-start blockers, destroys obstacles and eliminates actors, then decides the result. Placement checks active capacity and occupied cells before explosion processing, so a bomb due in this step still occupies its cell and consumes capacity during placement. Only the following step can use capacity released by that explosion.
+
+Every actor overlapping a newly placed bomb may leave; the bomb's `exitActorIds` are removed after complete separation. Other actors and actors that already left are blocked. Solid walls stop fire without becoming hazardous. A breakable blocker cell becomes hazardous and is destroyed, stopping that ray. Current collision immediately uses the surviving blockers on the next tick; the initial semantic map remains intact.
+
+One hit eliminates an actor. Eliminated actors retain their identity and final position, but cannot move or place bombs. With `playerId`, result priority is player death → loss, surviving player with no surviving opponents → win, otherwise reaching the time limit → draw. Result and a `match-ended` event appear in that same tick. Later `advanceTick` calls return no events and leave the entire world frozen, including bomb/fire timers.
+
+Events are frozen, carry their logical `tick` and zero-based per-step `order`, and follow phase order: `bomb-placed`, `bomb-exploded`, `blocker-destroyed`, `actor-eliminated`, `match-ended`. Placement uses actor-ID order, explosions use bomb creation order, destruction uses blocker-ID order, and elimination uses configured actor order. Hazard expiration is reflected in state rather than a separate event. Use a new match instance for retries and distinguish instances when consuming events.
+
+Same-cell conflicting placement requests are all skipped in this slice. Chain reactions and seeded same-cell arbitration belong to issue #5; known bombs currently explode only on their own fuse.
 
 ## Architecture guard
 

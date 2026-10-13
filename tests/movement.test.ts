@@ -176,7 +176,7 @@ test('recreates the same world after every tick from the frozen initialization r
   const source = { ...config, map: cornerMap, rules: { tickRate: 10, speed: 3, turnTolerance: 0, turnBufferTicks: 3 } };
   const first = createMatch(source);
   const record = first.readWorld().initialization;
-  expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'basic-bombs-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' }, actors: config.actors });
+  expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'basic-bombs-v2', map: 'fixed-map-v1', generator: 'none', ai: 'none' }, actors: config.actors });
   const retry = createMatch(record);
   source.rules.speed = 99;
   const path = ['right', 'right', 'down', undefined, 'down', 'down', 'left', null] as const;
