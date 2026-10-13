@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameplayEvent, WorldState } from '../match/index.js';
+import { resultLabels } from './result-labels.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
@@ -129,7 +130,7 @@ export class EntitiesView {
     const remaining = Math.max(0, Math.ceil(world.initialization.rules.matchDurationSeconds - world.tick / world.initialization.rules.tickRate));
     this.timer.setText(`${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`);
     this.result.setVisible(world.result !== null);
-    if (world.result) this.resultTitle.setText({ won: '练习完成', lost: '被炸中了', draw: '时间到' }[world.result.outcome]);
+    if (world.result) this.resultTitle.setText(resultLabels[world.result.outcome]);
     this.scene.game.canvas.dataset.consumedEvents = String(this.consumedEvents);
   }
 

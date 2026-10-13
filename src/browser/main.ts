@@ -4,6 +4,7 @@ import { createKeyboardInput } from '../input/keyboard.js';
 import { createGameSession, type GameSession } from '../game-flow/session.js';
 import { EntitiesView } from './entities-view.js';
 import { trainingMatchConfig } from './training-map.js';
+import { resultLabels } from './result-labels.js';
 import './style.css';
 
 // This is the only composition root: input -> game flow -> readonly state/events -> Phaser view.
@@ -72,7 +73,7 @@ class TrainingScene extends Phaser.Scene {
     if (result && result !== this.lastResult) {
       this.lastResult = result;
       const status = document.getElementById('game-status');
-      if (status) status.textContent = `${{ won: '练习完成', lost: '被炸中了', draw: '时间到' }[result]}。按 R 重试本局。`;
+      if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局。`;
     }
   }
 }
