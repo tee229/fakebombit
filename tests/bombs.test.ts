@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { createMatch, type MatchConfig } from '../src/match/index.js';
+import { trainingMatchConfig } from '../src/browser/training-map.js';
 
 const config: MatchConfig = {
   seed: 'basic-bomb-example',
@@ -14,6 +15,69 @@ const config: MatchConfig = {
     { id: 'enemy', type: 'actor', spawnId: 'opponent' },
   ],
 };
+
+test('escapes a bomb placed while pressed against the training arena wall and reproduces the escape on retry', () => {
+  const match = createMatch(trainingMatchConfig);
+  const retry = createMatch(match.readWorld().initialization);
+  const path = [
+    ...Array.from({ length: 10 }, () => ({ actorId: 'player', move: 'up' as const })),
+    { actorId: 'player', move: 'right' as const, bomb: true },
+    ...Array.from({ length: 39 }, () => ({ actorId: 'player', move: 'right' as const })),
+    ...Array.from({ length: 140 }, () => ({ actorId: 'player', move: null })),
+  ];
+  for (const intent of path) {
+    expect(retry.advanceTick([intent])).toEqual(match.advanceTick([intent]));
+    expect(retry.readWorld()).toEqual(match.readWorld());
+  }
+  expect(match.readWorld().actors[0]).toMatchObject({ alive: true, position: { x: expect.closeTo(3.5), y: 1.5 } });
+  expect(match.readWorld().bombs).toEqual([]);
+  expect(match.readWorld().hazards).toHaveLength(1);
+  expect(match.readWorld().result).toBeNull();
+});
+
+test('turns along a blocking bomb without gaining permission to enter it', () => {
+  const match = createMatch({ ...config, map: { ...config.map,
+    spawns: [{ id: 'start', x: 1, y: 1 }, { id: 'opponent', x: 1, y: 0 }],
+  } });
+  match.advanceTick([{ actorId: 'enemy', move: null, bomb: true }]);
+  for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.5, y: 1.5 });
+  match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.55, y: 1.5 });
+  match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  // The blocked turn may keep travelling right toward an open center, but
+  // cannot enter the bomb above it while waiting for that center.
+  expect(match.readWorld().actors[0]?.position.y).toBe(1.5);
+  expect(match.readWorld().bombs[0]?.exitActorIds).not.toContain('player');
+});
+
+test('revoking bomb leave permission between centers blocks re-entry without moving the actor backwards', () => {
+  const match = createMatch(config);
+  match.advanceTick([{ actorId: 'player', move: 'right', bomb: true }]);
+  for (let tick = 0; tick < 16; tick++) match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  const before = match.readWorld().actors[0]!.position;
+  expect(before.x).toBeCloseTo(2.35);
+  expect(match.readWorld().bombs[0]?.exitActorIds).not.toContain('player');
+  match.advanceTick([{ actorId: 'player', move: 'left' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual(before);
+  match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  expect(match.readWorld().actors[0]?.position.x).toBeCloseTo(2.4);
+});
+
+test('center-line movement beside a wall still takes damage when its swept path crosses active fire', () => {
+  const match = createMatch({ ...config, map: { ...config.map,
+    spawns: [{ id: 'start', x: 1, y: 1 }, { id: 'opponent', x: 3, y: 1 }],
+    blockers: [{ id: 'north', type: 'solid-wall', x: 1, y: 0 }],
+  }, rules: { speed: 300, bombFuseSeconds: 1 / 60, fireDurationSeconds: 1 } });
+  match.advanceTick([
+    { actorId: 'player', move: 'up' },
+    { actorId: 'enemy', move: 'down', bomb: true },
+  ]);
+  expect(match.readWorld().actors[0]).toMatchObject({ alive: true, position: { x: 1.5, y: 1.5 } });
+  const events = match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  expect(match.readWorld().actors[0]).toMatchObject({ alive: false, position: { x: 6.5, y: 1.5 } });
+  expect(events).toContainEqual(expect.objectContaining({ type: 'actor-eliminated', actorId: 'player' }));
+});
 
 test('places a bomb at the tick-start cell before movement and reports an ordered placement event', () => {
   const match = createMatch({ ...config, rules: { speed: 60 } });
@@ -52,9 +116,9 @@ test('lets every actor overlapping a new bomb leave, then blocks them and outsid
     { actorId: 'enemy', move: 'right' },
     { actorId: 'outsider', move: 'left' },
   ]);
-  expect(match.readWorld().actors.map(actor => actor.position.x)).toEqual([2.3, 0.7, 2.5]);
+  expect(match.readWorld().actors.map(actor => actor.position.x)).toEqual([2.5, 0.5, 2.5]);
   match.advanceTick([{ actorId: 'outsider', move: 'left' }]);
-  expect(match.readWorld().actors[2]?.position.x).toBe(2.3);
+  expect(match.readWorld().actors[2]?.position.x).toBe(2.5);
   expect(match.readWorld().bombs[0]?.exitActorIds).toEqual([]);
 });
 
@@ -183,7 +247,7 @@ test('crossing a future explosion before it starts is safe when the moved endpoi
   });
   // The bomb would block a straight crossing, so its owner has the leave permission.
   const events = match.advanceTick([{ actorId: 'enemy', move: 'right', bomb: true }]);
-  expect(match.readWorld().actors[1]).toMatchObject({ alive: true, position: { x: 6.7, y: 2.5 } });
+  expect(match.readWorld().actors[1]).toMatchObject({ alive: true, position: { x: 6.5, y: 2.5 } });
   expect(events.map(event => event.type)).toEqual(['bomb-placed', 'bomb-exploded']);
 });
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { GameplayEvent, WorldState } from '../match/index.js';
 import { resultLabels } from './result-labels.js';
+import { interpolatePosition } from './interpolate-position.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
@@ -110,8 +111,9 @@ export class EntitiesView {
       label.setVisible(actor.alive);
       if (!actor.alive) continue;
       const blend = world.result ? 1 : Math.max(0, Math.min(1, alpha));
-      const x = board.x + (actor.previousPosition.x + (actor.position.x - actor.previousPosition.x) * blend) * board.cell;
-      const y = board.y + (actor.previousPosition.y + (actor.position.y - actor.previousPosition.y) * blend) * board.cell;
+      const position = interpolatePosition(actor, blend);
+      const x = board.x + position.x * board.cell;
+      const y = board.y + position.y * board.cell;
       const player = actor.id === world.initialization.playerId;
       g.fillStyle(player ? colors.player : colors.gold);
       if (player) g.fillPoints([{ x, y: y - 22 }, { x: x + 22, y }, { x, y: y + 22 }, { x: x - 22, y }], true);

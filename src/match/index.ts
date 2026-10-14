@@ -127,7 +127,7 @@ const defaults: MatchRules = {
   tickRate: 60, speed: 3, radius: 0.3, turnBufferTicks: 8, turnTolerance: 0.12,
   bombCapacity: 1, blastRange: 1, bombFuseSeconds: 3, fireDurationSeconds: 0.5, matchDurationSeconds: 120,
 };
-const versions = { match: 'chain-bombs-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
+const versions = { match: 'center-line-movement-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
 const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 
 export function createMatch(config: MatchConfig): Match {
@@ -308,11 +308,13 @@ function moveAxis(position: Position, direction: Direction, distance: number, ma
   const across = axis === 'x' ? 'y' : 'x';
   const sign = vector[axis];
   const start = position[axis];
-  let end = Math.max(radius, Math.min((axis === 'x' ? map.width : map.height) - radius, start + sign * distance));
+  let end = Math.max(0.5, Math.min((axis === 'x' ? map.width : map.height) - 0.5, start + sign * distance));
   for (const wall of map.blockers) {
     if (position[across] + radius <= wall[across] || position[across] - radius >= wall[across] + 1) continue;
-    if (sign > 0 && start <= wall[axis] - radius) end = Math.min(end, wall[axis] - radius);
-    if (sign < 0 && start >= wall[axis] + 1 + radius) end = Math.max(end, wall[axis] + 1 + radius);
+    // Stop at the preceding cell center. A newly blocking bomb may find an
+    // actor already past that center; block re-entry without pushing it back.
+    if (sign > 0 && start <= wall[axis] - radius) end = Math.min(end, Math.max(start, wall[axis] - 0.5));
+    if (sign < 0 && start >= wall[axis] + 1 + radius) end = Math.max(end, Math.min(start, wall[axis] + 1.5));
   }
   return { ...position, [axis]: end };
 }
@@ -343,7 +345,9 @@ function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, m
     const position = moveAxis(snapped, wanted, distance, map, rules.radius);
     return { position, heading: wanted, path: [actor.position, snapped, position] };
   }
-  const heading = actor.heading;
+  // Releasing between centers loses the heading. Walk to the nearest open
+  // intersection before a perpendicular restart instead of leaving the rail.
+  const heading = actor.heading ?? (canTurn(snapped, wanted, map, rules.radius) ? snapDirection : null);
   const sign = heading ? vectors[heading][alignmentAxis] : 0;
   let center = sign < 0 ? Math.floor(actor.position[alignmentAxis] - 0.5 + 1e-10) + 0.5 : Math.ceil(actor.position[alignmentAxis] - 0.5 - 1e-10) + 0.5;
   const limit = alignmentAxis === 'x' ? map.width : map.height;

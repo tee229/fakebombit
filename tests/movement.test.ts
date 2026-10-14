@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { createMatch, type Blocker } from '../src/match/index.js';
+import { createMatch, type Blocker, type Direction } from '../src/match/index.js';
 
 const map = {
   width: 5, height: 3,
@@ -8,6 +8,54 @@ const map = {
   spawns: [{ id: 'start', x: 1, y: 1 }],
 };
 const config = { seed: 'movement-example', map, actors: [{ id: 'player', type: 'actor' as const, spawnId: 'start' }] };
+
+const wallTurns: { approach: Direction; turn: Direction; wall: { x: number; y: number } }[] = [
+  { approach: 'up', turn: 'left', wall: { x: 1, y: 0 } },
+  { approach: 'up', turn: 'right', wall: { x: 1, y: 0 } },
+  { approach: 'left', turn: 'up', wall: { x: 0, y: 1 } },
+  { approach: 'left', turn: 'down', wall: { x: 0, y: 1 } },
+  { approach: 'down', turn: 'left', wall: { x: 1, y: 2 } },
+  { approach: 'down', turn: 'right', wall: { x: 1, y: 2 } },
+  { approach: 'right', turn: 'up', wall: { x: 2, y: 1 } },
+  { approach: 'right', turn: 'down', wall: { x: 2, y: 1 } },
+];
+
+test.each(wallTurns)('turns $turn immediately after pressing against a wall $approach without backing away', ({ approach, turn, wall }) => {
+  const match = createMatch({ ...config, map: { ...map, blockers: [{ id: 'wall', type: 'solid-wall', ...wall }] } });
+  for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: approach }]);
+  const before = match.readWorld().actors[0]!.position;
+  expect(before).toEqual({ x: 1.5, y: 1.5 });
+  match.advanceTick([{ actorId: 'player', move: turn }]);
+  const after = match.readWorld().actors[0]!.position;
+  const axis = turn === 'left' || turn === 'right' ? 'x' : 'y';
+  const across = axis === 'x' ? 'y' : 'x';
+  const sign = turn === 'left' || turn === 'up' ? -1 : 1;
+  expect(after[axis]).toBeCloseTo(before[axis] + sign * 0.05);
+  expect(after[across]).toBe(before[across]);
+});
+
+test.each(['solid-wall', 'breakable-wall', 'map-edge'] as const)('can turn along a %s after releasing the approach key, even with center snapping disabled', type => {
+  const match = createMatch({ ...config, rules: { turnTolerance: 0 }, map: { ...map,
+    blockers: type === 'map-edge' ? [] : [{ id: 'wall', type, x: 1, y: 0 }],
+  } });
+  for (let tick = 0; tick < 40; tick++) match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  match.advanceTick([{ actorId: 'player', move: null }]);
+  const before = match.readWorld().actors[0]!.position;
+  match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.55, y: before.y });
+});
+
+test('wall turns still stop at a second blocker instead of cutting through a closed corner', () => {
+  const match = createMatch({ ...config, map: { ...map, blockers: [
+    { id: 'north', type: 'solid-wall', x: 1, y: 0 },
+    { id: 'east', type: 'solid-wall', x: 2, y: 1 },
+  ] } });
+  for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.5, y: 1.5 });
+  match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.5, y: 1.5 });
+});
 
 test('creates the fixed semantic map and advances a continuous cardinal move by one logical tick', () => {
   const match = createMatch(config);
@@ -19,9 +67,9 @@ test('creates the fixed semantic map and advances a continuous cardinal move by 
 test.each(['solid-wall', 'breakable-wall'] as const)('continuous movement stops at a %s without tunneling', type => {
   const match = createMatch({ ...config, map: { ...map, width: 7, ground: Array.from({ length: 21 }, () => 'floor' as const), blockers: [{ id: 'obstacle', type, x: 3, y: 1 }] }, rules: { speed: 120 } });
   match.advanceTick([{ actorId: 'player', move: 'right' }]);
-  expect(match.readWorld().actors[0]?.position).toEqual({ x: 2.7, y: 1.5 });
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 2.5, y: 1.5 });
   match.advanceTick([{ actorId: 'player', move: 'right' }]);
-  expect(match.readWorld().actors[0]?.position).toEqual({ x: 2.7, y: 1.5 });
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 2.5, y: 1.5 });
 });
 
 test('actors pass through each other and map edges stop all four cardinal directions', () => {
@@ -32,7 +80,7 @@ test('actors pass through each other and map edges stop all four cardinal direct
     const edge = createMatch({ ...config, rules: { speed: 600 } });
     edge.advanceTick([{ actorId: 'player', move: direction }]);
     expect(edge.readWorld().actors[0]?.position).toEqual({
-      up: { x: 1.5, y: 0.3 }, right: { x: 4.7, y: 1.5 }, down: { x: 1.5, y: 2.7 }, left: { x: 0.3, y: 1.5 },
+      up: { x: 1.5, y: 0.5 }, right: { x: 4.5, y: 1.5 }, down: { x: 1.5, y: 2.5 }, left: { x: 0.5, y: 1.5 },
     }[direction]);
   }
 });
@@ -176,7 +224,7 @@ test('recreates the same world after every tick from the frozen initialization r
   const source = { ...config, map: cornerMap, rules: { tickRate: 10, speed: 3, turnTolerance: 0, turnBufferTicks: 3 } };
   const first = createMatch(source);
   const record = first.readWorld().initialization;
-  expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'chain-bombs-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' }, actors: config.actors });
+  expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'center-line-movement-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' }, actors: config.actors });
   const retry = createMatch(record);
   source.rules.speed = 99;
   const path = ['right', 'right', 'down', undefined, 'down', 'down', 'left', null] as const;
@@ -195,10 +243,29 @@ test('rejects a recorded initialization that requires another implementation ver
   expect(() => createMatch(record)).toThrowError(expect.objectContaining({ code: 'invalid-config' }));
 });
 
-test('begins moving toward an adjacent wall and stops at collision contact rather than the cell center', () => {
-  const match = createMatch({ ...config, map: { ...map, blockers: [{ id: 'nearby', type: 'solid-wall', x: 2, y: 1 }] } });
+test.each(['chain-bombs-v1', 'chain-bombs-v2'])('rejects initialization recorded with contact-based movement: %s', version => {
+  const record = structuredClone(createMatch(config).readWorld().initialization);
+  Reflect.set(record.versions, 'match', version);
+  expect(() => createMatch(record)).toThrowError(expect.objectContaining({ code: 'invalid-config' }));
+});
+
+test.each([0.1, 0.3, 0.49])('stays at the current cell center beside an adjacent wall with radius %s', radius => {
+  const match = createMatch({ ...config, rules: { radius }, map: { ...map, blockers: [{ id: 'nearby', type: 'solid-wall', x: 2, y: 1 }] } });
   for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: 'right' }]);
-  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.7, y: 1.5 });
+  expect(match.readWorld().actors[0]?.position).toEqual({ x: 1.5, y: 1.5 });
+});
+
+test('resumes a perpendicular turn after release between centers by walking to the nearest open intersection', () => {
+  const match = createMatch({ ...config, rules: { turnTolerance: 0 } });
+  for (let tick = 0; tick < 6; tick++) match.advanceTick([{ actorId: 'player', move: 'right' }]);
+  match.advanceTick([{ actorId: 'player', move: null }]);
+  expect(match.readWorld().actors[0]?.position.x).toBeCloseTo(1.8);
+  match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  expect(match.readWorld().actors[0]?.position.x).toBeCloseTo(1.75);
+  expect(match.readWorld().actors[0]?.position.y).toBe(1.5);
+  for (let tick = 0; tick < 10; tick++) match.advanceTick([{ actorId: 'player', move: 'up' }]);
+  expect(match.readWorld().actors[0]?.position.x).toBe(1.5);
+  expect(match.readWorld().actors[0]!.position.y).toBeLessThan(1.5);
 });
 
 test('rejects a length-correct sparse ground layer instead of accepting missing floor cells', () => {

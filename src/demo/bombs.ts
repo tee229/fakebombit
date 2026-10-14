@@ -46,7 +46,7 @@ const leave = play('Leave: exit a bomb, fail to re-enter, then retreat safely', 
   map: { ...config.map, spawns: [config.map.spawns[0]!, { id: 'opponent', x: 5, y: 3 }] },
   rules: { ...config.rules, bombFuseSeconds: 0.5, matchDurationSeconds: 2 },
 }, [[{ actorId: 'player', move: 'right', bomb: true }], [{ actorId: 'player', move: 'left' }]]);
-assert.equal(leave.readWorld().actors[0]!.position.x, 2.3);
+assert.equal(leave.readWorld().actors[0]!.position.x, 2.5);
 assert.deepEqual(leave.readWorld().bombs[0]!.exitActorIds, []);
 leave.advanceTick([{ actorId: 'player', move: 'right' }]);
 leave.advanceTick([{ actorId: 'player', move: 'right' }]);
