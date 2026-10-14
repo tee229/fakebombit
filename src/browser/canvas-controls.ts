@@ -5,6 +5,7 @@ import type { Position } from '../match/index.js';
 import { arenaLayout as layout } from './layout.js';
 
 type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry';
+type PointerEventName = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture';
 type Commands = { pause(): void; resume(): void; retry(): void };
 const ink = 0xeaf3ed, accent = 0x83dfb6, surface = 0x173737;
 
@@ -12,11 +13,13 @@ const ink = 0xeaf3ed, accent = 0x83dfb6, surface = 0x173737;
 export class CanvasControls {
   private readonly root: Phaser.GameObjects.Container;
   private readonly graphics: Phaser.GameObjects.Graphics;
-  private readonly labels: Phaser.GameObjects.Text[] = [];
+  private readonly pauseLabel: Phaser.GameObjects.Text;
+  private readonly pauseMessage: Phaser.GameObjects.Text;
+  private readonly pauseLabels: Phaser.GameObjects.Text[];
   private readonly pointers = new Map<number, Control>();
   private phase: GameFrame['phase'] = 'playing';
   private readonly canvas: HTMLCanvasElement;
-  private readonly listeners: [string, (event: PointerEvent) => void][];
+  private readonly listeners: [PointerEventName, (event: PointerEvent) => void][];
 
   constructor(scene: Phaser.Scene, private readonly input: PlayerInput, private readonly commands: Commands) {
     this.canvas = scene.game.canvas;
@@ -24,15 +27,16 @@ export class CanvasControls {
     this.graphics = scene.add.graphics(); this.root.add(this.graphics);
     const label = (x: number, y: number, text: string, size = 24) => {
       const item = scene.add.text(x, y, text, { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: `${size}px`, color: '#eaf3ed' }).setOrigin(0.5);
-      this.labels.push(item); this.root.add(item); return item;
+      this.root.add(item); return item;
     };
     label(layout.joystick.x, 500, '拖动移动');
     label(layout.bomb.x, layout.bomb.y + 28, '放弹');
-    label(layout.pause.x, layout.pause.y, '暂停');
+    this.pauseLabel = label(layout.pause.x, layout.pause.y, '暂停');
     label(layout.retry.x, layout.retry.y, '重试');
-    label(512, 254, '已暂停', 36);
-    label(512, 298, '点击继续，重新操作', 22);
-    label(layout.resume.x, layout.resume.y, '继续游戏', 28);
+    const pauseTitle = label(512, 254, '已暂停', 36);
+    this.pauseMessage = label(512, 298, '点击继续，重新操作', 22);
+    const resumeLabel = label(layout.resume.x, layout.resume.y, '继续游戏', 28).setColor('#102b2c');
+    this.pauseLabels = [pauseTitle, this.pauseMessage, resumeLabel];
     this.listeners = [
       ['pointerdown', event => this.down(event)],
       ['pointermove', event => this.move(event)],
@@ -40,7 +44,7 @@ export class CanvasControls {
       ['pointercancel', event => this.cancel(event)],
       ['lostpointercapture', event => this.cancel(event)],
     ];
-    for (const [name, listener] of this.listeners) this.canvas.addEventListener(name, listener as EventListener);
+    for (const [name, listener] of this.listeners) this.canvas.addEventListener(name, listener);
   }
 
   present(frame: GameFrame, touch: TouchState): void {
@@ -64,14 +68,13 @@ export class CanvasControls {
       g.fillStyle(surface).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       g.lineStyle(2, 0x79958c).strokeRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
     }
-    this.labels[2]!.setAlpha(active ? 1 : 0.45);
-    for (const item of this.labels.slice(4)) item.setVisible(this.phase === 'paused');
+    this.pauseLabel.setAlpha(active ? 1 : 0.45);
+    for (const item of this.pauseLabels) item.setVisible(this.phase === 'paused');
     if (this.phase === 'paused') {
       g.fillStyle(0x102b2c, 0.96).fillRect(layout.board.x, layout.board.y, 540, 420);
       const button = layout.resume;
       g.fillStyle(accent).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
-      this.labels[5]!.setText(frame.pauseReason === 'background' ? '离开页面已暂停，返回后手动继续' : '点击继续，重新操作');
-      this.labels[6]!.setColor('#102b2c');
+      this.pauseMessage.setText(frame.pauseReason === 'background' ? '离开页面已暂停，返回后手动继续' : '点击继续，重新操作');
     }
   }
 
@@ -82,7 +85,7 @@ export class CanvasControls {
   }
 
   destroy(): void {
-    for (const [name, listener] of this.listeners) this.canvas.removeEventListener(name, listener as EventListener);
+    for (const [name, listener] of this.listeners) this.canvas.removeEventListener(name, listener);
     this.clear(); this.root.destroy(true);
   }
 
