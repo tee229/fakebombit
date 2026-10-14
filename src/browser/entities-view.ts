@@ -2,13 +2,14 @@ import Phaser from 'phaser';
 import type { GameplayEvent, WorldState } from '../match/index.js';
 import { resultLabels } from './result-labels.js';
 import { interpolatePosition } from './interpolate-position.js';
+import { arenaLayout } from './layout.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
   crate: 0x876c42, gold: 0xf1ca7c, player: 0x83dfb6, fire: 0xc95f45, ink: 0xeaf3ed,
 };
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
-const board = { x: 40, y: 158, cell: 60 };
+const board = arenaLayout.board;
 
 /** The view reads gameplay facts; drawing and event history never alter the match. */
 export class EntitiesView {
@@ -29,22 +30,17 @@ export class EntitiesView {
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
-    this.text(40, 30, 'Fake Bomb It', 38, '#eaf3ed', '600');
-    this.text(40, 84, '实体训练场  /  固定地图 · 键盘练习', 18, '#b8d1c6');
-    this.text(817, 32, '剩余时间', 17, '#b8d1c6');
-    this.timer = this.text(817, 57, '02:00', 34, '#eaf3ed', '600');
-    this.text(626, 156, '淘汰 3 个静止目标', 24, '#eaf3ed', '600');
-    this.progress = this.text(626, 193, '', 18, '#b8d1c6');
-    this.capacity = this.text(626, 224, '', 18, '#b8d1c6');
-    this.text(626, 287, '操作', 18, '#eaf3ed', '600');
-    this.text(626, 321, '移动     WASD / 方向键', 18, '#b8d1c6');
-    this.text(626, 354, '放弹     空格', 18, '#b8d1c6');
-    this.text(626, 387, '重试     R', 18, '#b8d1c6');
-    this.text(626, 451, '场上变化', 18, '#eaf3ed', '600');
-    this.history = this.text(626, 487, '先放一颗炸弹，再离开十字范围。', 17, '#b8d1c6');
-    this.text(40, 670, '炸弹 3 秒后爆炸。火焰仍显示时，经过也会受伤。', 17, '#b8d1c6');
+    this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
+    this.text(24, 63, '实体训练场 · 横屏游玩', 20, '#b8d1c6');
+    this.text(688, 18, '剩余时间', 17, '#b8d1c6');
+    this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
+    this.progress = this.text(386, 22, '', 22, '#eaf3ed');
+    this.capacity = this.text(386, 58, '', 20, '#b8d1c6');
+    this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
+    this.history = this.text(24, 152, '放弹后\n离开十字范围', 18, '#b8d1c6');
+    this.text(24, 538, 'WASD / 方向键', 18, '#b8d1c6');
     const legend = [['固定墙', '#79958c'], ['可破坏障碍', '#f1ca7c'], ['炸弹', '#eaf3ed'], ['有效火焰', '#ffaf8c']] as const;
-    for (const [index, [label, color]] of legend.entries()) this.text(72 + index * 220, 618, label, 16, color);
+    for (const [index, [label, color]] of legend.entries()) this.text(274 + index * 135, 543, label, 16, color);
 
     world.actors.forEach((actor, index) => {
       const label = actor.id === world.initialization.playerId ? 'P' : String(index).padStart(2, '0');
@@ -53,9 +49,9 @@ export class EntitiesView {
     });
     this.result = scene.add.container(0, 0).setVisible(false);
     this.root.add(this.result);
-    const shade = scene.add.rectangle(310, 368, 490, 205, colors.background, 0.97).setStrokeStyle(2, colors.player);
-    this.resultTitle = scene.add.text(310, 321, '', { fontFamily: font, fontSize: '34px', fontStyle: 'bold', color: '#eaf3ed' }).setOrigin(0.5);
-    const retry = scene.add.text(310, 389, '按 R 重试本局', { fontFamily: font, fontSize: '22px', color: '#83dfb6' }).setOrigin(0.5);
+    const shade = scene.add.rectangle(512, 310, 510, 205, colors.background, 0.97).setStrokeStyle(2, colors.player);
+    this.resultTitle = scene.add.text(512, 270, '', { fontFamily: font, fontSize: '34px', fontStyle: 'bold', color: '#eaf3ed' }).setOrigin(0.5);
+    const retry = scene.add.text(512, 343, '点击右侧重试 / 按 R', { fontFamily: font, fontSize: '22px', color: '#83dfb6' }).setOrigin(0.5);
     this.result.add([shade, this.resultTitle, retry]);
     this.present(world, 0, []);
   }
@@ -70,8 +66,8 @@ export class EntitiesView {
         'bomb-placed': '放下炸弹', 'bomb-exploded': '炸弹引爆', 'blocker-destroyed': '障碍被炸开',
         'actor-eliminated': '角色淘汰', 'match-ended': '本局结束',
       };
-      this.changes.unshift(`${seconds}s   ${descriptions[event.type]}`);
-      this.changes.length = Math.min(this.changes.length, 4);
+      this.changes.unshift(`${seconds}s ${descriptions[event.type]}`);
+      this.changes.length = Math.min(this.changes.length, 3);
     }
     if (this.changes.length) this.history.setText(this.changes.join('\n')).setLineSpacing(12);
     const g = this.graphics.clear();
@@ -121,11 +117,11 @@ export class EntitiesView {
       label.setPosition(x, y);
     }
     // The legend uses the same geometric grammar, never texture-derived gameplay facts.
-    g.fillStyle(colors.wall).fillRect(40, 618, 18, 18);
-    g.lineStyle(2, colors.gold).strokeRect(259, 618, 18, 18).lineBetween(261, 620, 275, 634).lineBetween(275, 620, 261, 634);
-    g.lineStyle(2, colors.ink).strokeCircle(489, 627, 9);
-    g.fillStyle(colors.fire).fillRect(700, 618, 18, 18);
-    g.lineStyle(2, 0xffdec5).lineBetween(704, 627, 714, 627).lineBetween(709, 622, 709, 632);
+    g.fillStyle(colors.wall).fillRect(248, 542, 18, 18);
+    g.lineStyle(2, colors.gold).strokeRect(383, 542, 18, 18).lineBetween(385, 544, 399, 558).lineBetween(399, 544, 385, 558);
+    g.lineStyle(2, colors.ink).strokeCircle(527, 551, 9);
+    g.fillStyle(colors.fire).fillRect(653, 542, 18, 18);
+    g.lineStyle(2, 0xffdec5).lineBetween(657, 551, 667, 551).lineBetween(662, 546, 662, 556);
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
     this.progress.setText(`目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
     this.capacity.setText(`已放炸弹  ${world.bombs.filter(bomb => bomb.ownerId === world.initialization.playerId).length} / ${world.initialization.rules.bombCapacity}`);

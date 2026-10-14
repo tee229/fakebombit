@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { createGameSession } from '../src/game-flow/session.js';
 import { createKeyboardInput } from '../src/input/keyboard.js';
+import { createPlayerInput } from '../src/input/player.js';
 import { createMatch, type MatchConfig } from '../src/match/index.js';
 
 const config: MatchConfig = {
@@ -8,6 +9,64 @@ const config: MatchConfig = {
   map: { width: 12, height: 7, ground: Array.from({ length: 84 }, () => 'floor'), blockers: [], spawns: [{ id: 'start', x: 1, y: 1 }, { id: 'other', x: 10, y: 5 }] },
   actors: [{ id: 'player', type: 'actor', spawnId: 'start' }, { id: 'other', type: 'actor', spawnId: 'other' }],
 };
+
+test('background pause freezes the entire match, clears held and pending input, and manual resume discards the background frame', () => {
+  const input = createKeyboardInput();
+  const session = createGameSession(createMatch(config), input);
+  input.keyDown('KeyD'); input.keyDown('Space');
+  const before = session.advanceFrame(20);
+  input.keyUp('Space'); input.keyDown('Space');
+  session.pause('background');
+  const paused = session.advanceFrame(60_000);
+  expect(paused.phase).toBe('paused');
+  expect(paused.world).toEqual(before.world);
+  expect(paused.events).toEqual([]);
+  expect(paused.steps).toBe(0);
+  session.resume();
+  const firstResume = session.advanceFrame(60_000);
+  expect(firstResume.world).toEqual(before.world);
+  expect(firstResume.alpha).toBe(1);
+  const resumed = session.advanceFrame(20);
+  expect(resumed.phase).toBe('playing');
+  expect(resumed.world.tick).toBe(before.world.tick + 1);
+  expect(resumed.world.actors[0]?.position).toEqual(before.world.actors[0]?.position);
+  expect(resumed.events).toEqual([]);
+});
+
+test.each([30, 60, 120])('touch movement and a quick bomb tap are independent of %s FPS and catch-up steps', fps => {
+  const input = createPlayerInput();
+  const session = createGameSession(createMatch(config), input);
+  input.pointerDown(11, 'joystick', { x: 0.8, y: 0.1 });
+  input.pointerDown(22, 'bomb'); input.pointerUp(22);
+  expect(session.advanceFrame(0).events).toEqual([]);
+  let placements = 0;
+  for (let frame = 0; frame < fps; frame++) placements += session.advanceFrame(1000 / fps).events.filter(event => event.type === 'bomb-placed').length;
+  const end = session.advanceFrame(0);
+  expect(end.world.tick).toBe(60);
+  expect(end.world.actors[0]?.position.x).toBeCloseTo(4.5);
+  expect(end.world.bombs[0]?.detonateAtTick).toBe(180);
+  expect(placements).toBe(1);
+});
+
+test('manual pause discards fractional time and ignores touches queued while paused until fresh input after resume', () => {
+  const input = createPlayerInput();
+  const session = createGameSession(createMatch(config), input);
+  session.advanceFrame(15);
+  expect(session.pause()).toBe(true);
+  input.pointerDown(11, 'joystick', { x: 0.8, y: 0 }); input.pointerDown(22, 'bomb');
+  expect(session.pause()).toBe(false);
+  expect(session.advanceFrame(1000).pauseReason).toBe('manual');
+  expect(session.resume()).toBe(true);
+  expect(session.resume()).toBe(false);
+  expect(session.advanceFrame(1000).steps).toBe(0);
+  expect(session.advanceFrame(10).steps).toBe(0);
+  const next = session.advanceFrame(10);
+  expect(next.steps).toBe(1);
+  expect(next.events).toEqual([]);
+  expect(next.world.actors[0]?.position).toEqual({ x: 1.5, y: 1.5 });
+  input.pointerDown(33, 'joystick', { x: 0.8, y: 0 });
+  expect(session.advanceFrame(20).world.actors[0]?.position.x).toBeCloseTo(1.55);
+});
 
 test('a frame advances complete logical steps with held input and preserves consecutive logical positions', () => {
   const input = createKeyboardInput();
@@ -83,6 +142,9 @@ test('a terminal match stops stepping and future frames cannot re-deliver ending
   expect(end.steps).toBe(1);
   expect(end.alpha).toBe(1);
   expect(end.events.map(event => event.type)).toEqual(['match-ended']);
+  expect(end.phase).toBe('ended');
+  expect(session.pause()).toBe(false);
+  expect(session.resume()).toBe(false);
   const after = session.advanceFrame(1000);
   expect(after.steps).toBe(0);
   expect(after.alpha).toBe(1);
