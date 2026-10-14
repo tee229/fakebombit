@@ -1,4 +1,4 @@
-import { createArbitrationRandom } from './arbitration.js';
+import { createArbitrationRandom, createGameplayRandom } from './arbitration.js';
 
 export type Direction = 'up' | 'right' | 'down' | 'left';
 export interface Position {
@@ -25,6 +25,13 @@ export interface MovementRules {
   readonly turnTolerance: number;
 }
 export interface MatchRules extends MovementRules {
+  readonly itemDropChance: number;
+  readonly capacityGain: number;
+  readonly rangeGain: number;
+  readonly speedGain: number;
+  readonly maxBombCapacity: number;
+  readonly maxBlastRange: number;
+  readonly maxSpeed: number;
   readonly bombCapacity: number;
   readonly blastRange: number;
   readonly bombFuseSeconds: number;
@@ -47,6 +54,7 @@ export interface BombState extends Position {
   readonly exitActorIds: readonly string[];
   readonly placedAtTick: number;
   readonly detonateAtTick: number;
+  readonly blastRange: number;
 }
 export interface FireState {
   readonly id: string;
@@ -55,6 +63,42 @@ export interface FireState {
   readonly cells: readonly Position[];
   readonly createdAtTick: number;
   readonly expiresAtTick: number;
+}
+export type ItemKind = 'item.capacity' | 'item.range' | 'item.speed';
+export interface ItemState extends Position {
+  readonly id: string;
+  readonly type: ItemKind;
+  readonly spawnedAtTick: number;
+  readonly active: boolean;
+}
+export interface ItemSpawnedEvent {
+  readonly type: 'item-spawned';
+  readonly tick: number;
+  readonly order: number;
+  readonly itemId: string;
+  readonly kind: ItemKind;
+  readonly cell: Position;
+}
+export interface ActorAbilities {
+  readonly bombCapacity: number;
+  readonly blastRange: number;
+  readonly speed: number;
+}
+export interface ItemCollectedEvent {
+  readonly type: 'item-collected';
+  readonly tick: number;
+  readonly order: number;
+  readonly itemId: string;
+  readonly kind: ItemKind;
+  readonly actorId: string;
+  readonly abilities: ActorAbilities;
+}
+export interface ItemDestroyedEvent {
+  readonly type: 'item-destroyed';
+  readonly tick: number;
+  readonly order: number;
+  readonly itemId: string;
+  readonly kind: ItemKind;
 }
 export interface PlacementEvent {
   readonly type: 'bomb-placed';
@@ -92,7 +136,7 @@ export interface MatchEndedEvent {
   readonly order: number;
   readonly result: MatchResult;
 }
-export type GameplayEvent = PlacementEvent | ExplosionEvent | BlockerDestroyedEvent | EliminationEvent | MatchEndedEvent;
+export type GameplayEvent = PlacementEvent | ExplosionEvent | BlockerDestroyedEvent | EliminationEvent | MatchEndedEvent | ItemSpawnedEvent | ItemCollectedEvent | ItemDestroyedEvent;
 export interface ActorState {
   readonly id: string;
   readonly type: 'actor';
@@ -100,6 +144,7 @@ export interface ActorState {
   readonly previousPosition: Position;
   readonly heading: Direction | null;
   readonly alive: boolean;
+  readonly abilities: ActorAbilities;
 }
 export interface InitializationRecord {
   readonly seed: string;
@@ -117,6 +162,7 @@ export interface WorldState {
   readonly actors: readonly ActorState[];
   readonly bombs: readonly BombState[];
   readonly hazards: readonly FireState[];
+  readonly items: readonly ItemState[];
   readonly result: MatchResult | null;
 }
 export interface Match {
@@ -126,8 +172,11 @@ export interface Match {
 const defaults: MatchRules = {
   tickRate: 60, speed: 3, radius: 0.3, turnBufferTicks: 8, turnTolerance: 0.12,
   bombCapacity: 1, blastRange: 1, bombFuseSeconds: 3, fireDurationSeconds: 0.5, matchDurationSeconds: 120,
+  itemDropChance: 0.5,
+  capacityGain: 1, rangeGain: 1, speedGain: 0.5,
+  maxBombCapacity: 4, maxBlastRange: 6, maxSpeed: 5,
 };
-const versions = { match: 'center-line-movement-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
+const versions = { match: 'items-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
 const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 
 export function createMatch(config: MatchConfig): Match {
@@ -139,6 +188,10 @@ export function createMatch(config: MatchConfig): Match {
   }
 
   const rules = { ...defaults, ...config.rules };
+  // Existing high-speed/capacity scenarios retain their base capabilities when no cap was supplied.
+  if (!Object.hasOwn(config.rules ?? {}, 'maxBombCapacity')) rules.maxBombCapacity = Math.max(defaults.maxBombCapacity, rules.bombCapacity);
+  if (!Object.hasOwn(config.rules ?? {}, 'maxBlastRange')) rules.maxBlastRange = Math.max(defaults.maxBlastRange, rules.blastRange);
+  if (!Object.hasOwn(config.rules ?? {}, 'maxSpeed')) rules.maxSpeed = Math.max(defaults.maxSpeed, rules.speed);
   validateRules(rules);
   const map: SemanticMap = {
     width: config.map.width,
@@ -160,24 +213,32 @@ export function createMatch(config: MatchConfig): Match {
   let fireSequence = 0;
   let bombs: BombState[] = [];
   let hazards: FireState[] = [];
+  let items: ItemState[] = [];
+  let itemSequence = 0;
   let blockers = [...map.blockers];
   let result: MatchResult | null = null;
   const chooseIndex = createArbitrationRandom(initialization.seed);
+  const chooseDrop = createGameplayRandom(initialization.seed, 'item-drop');
+  const choosePickup = createGameplayRandom(initialization.seed, 'item-pickup');
   const entityIds = new Set([...map.blockers.map(wall => wall.id), ...config.actors.map(actor => actor.id)]);
   const pending = new Map<string, { direction: Direction; expires: number }>();
   let actors: ActorState[] = config.actors.map(actor => {
     const spawn = map.spawns.find(spawn => spawn.id === actor.spawnId)!;
     const position = { x: spawn.x + 0.5, y: spawn.y + 0.5 };
-    return { id: actor.id, type: 'actor', position, previousPosition: position, heading: null, alive: true };
+    return { id: actor.id, type: 'actor', position, previousPosition: position, heading: null, alive: true,
+      abilities: { bombCapacity: rules.bombCapacity, blastRange: rules.blastRange, speed: rules.speed } };
   });
   return {
     advanceTick(intents = []) {
       if (result) return freeze([]);
       validateIntents(intents, actors);
+      // A cleared cell becomes collectible on the next step, after all tick-start fire is gone.
+      items = items.map(item => item.active || hazards.some(hazard => hazard.cells.some(cell => cell.x === item.x && cell.y === item.y))
+        ? item : { ...item, active: true });
       const events: GameplayEvent[] = [];
       const damage = new Map<string, string>();
       const requests = actors.filter(actor => actor.alive && intents.some(intent => intent.actorId === actor.id && intent.bomb)
-        && bombs.filter(bomb => bomb.ownerId === actor.id).length < rules.bombCapacity
+        && bombs.filter(bomb => bomb.ownerId === actor.id).length < actor.abilities.bombCapacity
         && !bombs.some(bomb => bomb.x === Math.floor(actor.position.x) && bomb.y === Math.floor(actor.position.y)))
         .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
       const groups = new Map<string, { cell: Position; candidates: ActorState[] }>();
@@ -195,6 +256,7 @@ export function createMatch(config: MatchConfig): Match {
         entityIds.add(id);
         const exitActorIds = actors.filter(other => other.alive && overlapsCell(other.position, cell, rules.radius)).map(other => other.id).sort();
         bombs = [...bombs, { id, type: 'bomb', ownerId: actor.id, ...cell, exitActorIds,
+          blastRange: actor.abilities.blastRange,
           placedAtTick: tick, detonateAtTick: tick + Math.ceil(rules.bombFuseSeconds * rules.tickRate) }];
         events.push({ type: 'bomb-placed', tick: tick + 1, order: events.length, bombId: id, actorId: actor.id, cell });
       }
@@ -210,7 +272,7 @@ export function createMatch(config: MatchConfig): Match {
         const wanted = pending.get(actor.id)?.direction;
         if (!wanted) return { ...actor, previousPosition: actor.position, heading: null };
         const collisionMap = { ...map, blockers: [...blockers, ...bombs.filter(bomb => !bomb.exitActorIds.includes(actor.id))] };
-        const moved = moveActor(actor, wanted, rules, collisionMap);
+        const moved = moveActor(actor, wanted, { ...rules, speed: actor.abilities.speed }, collisionMap);
         const hazard = hazards.find(hazard => hazard.cells.some(cell => pathTouchesCell(moved.path, cell, rules.radius)));
         if (hazard) damage.set(actor.id, hazard.id);
         bombs = bombs.map(bomb => ({ ...bomb, exitActorIds: bomb.exitActorIds.filter(id => id !== actor.id || overlapsCell(moved.position, bomb, rules.radius)) }));
@@ -229,7 +291,7 @@ export function createMatch(config: MatchConfig): Match {
         const bomb = bombs.find(bomb => bomb.id === bombId)!;
         const cells: Position[] = [{ x: bomb.x, y: bomb.y }];
         for (const vector of Object.values(vectors)) {
-          for (let distance = 1; distance <= rules.blastRange; distance++) {
+          for (let distance = 1; distance <= bomb.blastRange; distance++) {
             const cell = { x: bomb.x + vector.x * distance, y: bomb.y + vector.y * distance };
             if (cell.x < 0 || cell.x >= map.width || cell.y < 0 || cell.y >= map.height) break;
             const wall = blockers.find(wall => wall.x === cell.x && wall.y === cell.y);
@@ -252,10 +314,23 @@ export function createMatch(config: MatchConfig): Match {
         events.push({ type: 'bomb-exploded', tick, order: events.length, bombId, hazardId: id, cells });
       }
       bombs = bombs.filter(bomb => !exploded.has(bomb.id));
+      const burnedItems = items.filter(item => item.active && [...exploded.values()].some(cells => cells.some(cell => cell.x === item.x && cell.y === item.y)))
+        .sort((left, right) => left.y - right.y || left.x - right.x);
+      for (const item of burnedItems) events.push({ type: 'item-destroyed', tick, order: events.length, itemId: item.id, kind: item.type });
+      items = items.filter(item => !burnedItems.some(burned => burned.id === item.id));
       for (const wall of blockers.filter(wall => destroyed.has(wall.id)).sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0)) {
         events.push({ type: 'blocker-destroyed', tick, order: events.length, blockerId: wall.id });
       }
       blockers = blockers.filter(wall => !destroyed.has(wall.id));
+      for (const wall of map.blockers.filter(wall => destroyed.has(wall.id)).sort((left, right) => left.y - right.y || left.x - right.x)) {
+        if (chooseDrop(4294967296) / 4294967296 >= rules.itemDropChance) continue;
+        const kind = (['item.capacity', 'item.range', 'item.speed'] as const)[chooseDrop(3)]!;
+        let id: string;
+        do { id = `item-${++itemSequence}`; } while (entityIds.has(id));
+        entityIds.add(id);
+        items.push({ id, type: kind, x: wall.x, y: wall.y, spawnedAtTick: tick, active: false });
+        events.push({ type: 'item-spawned', tick, order: events.length, itemId: id, kind, cell: { x: wall.x, y: wall.y } });
+      }
       const eliminated: { actorId: string; hazardId: string }[] = [];
       actors = actors.map(actor => {
         if (!actor.alive) return actor;
@@ -269,6 +344,21 @@ export function createMatch(config: MatchConfig): Match {
       for (const elimination of eliminated.sort((left, right) => left.actorId < right.actorId ? -1 : left.actorId > right.actorId ? 1 : 0)) {
         events.push({ type: 'actor-eliminated', tick, order: events.length, ...elimination });
       }
+      const collected = new Set<string>();
+      for (const item of items.filter(item => item.active).sort((left, right) => left.y - right.y || left.x - right.x)) {
+        const candidates = actors.filter(actor => actor.alive && Math.floor(actor.position.x) === item.x && Math.floor(actor.position.y) === item.y)
+          .sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+        if (candidates.length === 0) continue;
+        const actor = candidates[candidates.length === 1 ? 0 : choosePickup(candidates.length)]!;
+        const abilities = { ...actor.abilities };
+        if (item.type === 'item.capacity') abilities.bombCapacity = Math.min(rules.maxBombCapacity, abilities.bombCapacity + rules.capacityGain);
+        if (item.type === 'item.range') abilities.blastRange = Math.min(rules.maxBlastRange, abilities.blastRange + rules.rangeGain);
+        if (item.type === 'item.speed') abilities.speed = Math.min(rules.maxSpeed, abilities.speed + rules.speedGain);
+        actors = actors.map(other => other.id === actor.id ? { ...other, abilities } : other);
+        collected.add(item.id);
+        events.push({ type: 'item-collected', tick, order: events.length, itemId: item.id, kind: item.type, actorId: actor.id, abilities });
+      }
+      items = items.filter(item => !collected.has(item.id));
       if (initialization.playerId !== undefined) {
         const player = actors.find(actor => actor.id === initialization.playerId)!;
         const outcome = !player.alive ? 'lost'
@@ -281,7 +371,7 @@ export function createMatch(config: MatchConfig): Match {
       }
       return freeze(events);
     },
-    readWorld() { return freeze({ tick, initialization, initialMap: map, blockers, actors, bombs, hazards, result }); },
+    readWorld() { return freeze({ tick, initialization, initialMap: map, blockers, actors, bombs, hazards, items, result }); },
   };
 }
 
@@ -412,6 +502,15 @@ function validateConfig(config: unknown): void {
   }
 }
 function validateRules(rules: MatchRules): void {
+  if (!Number.isFinite(rules.itemDropChance) || rules.itemDropChance < 0 || rules.itemDropChance > 1) throw new MatchError('invalid-config', 'itemDropChance must be between 0 and 1');
+  for (const key of ['capacityGain', 'rangeGain'] as const) {
+    if (!Number.isSafeInteger(rules[key]) || rules[key] <= 0) throw new MatchError('invalid-config', `${key} must be a positive safe integer`);
+  }
+  for (const [cap, base] of [['maxBombCapacity', 'bombCapacity'], ['maxBlastRange', 'blastRange']] as const) {
+    if (!Number.isSafeInteger(rules[cap]) || rules[cap] < rules[base]) throw new MatchError('invalid-config', `${cap} must be a safe integer at least its base ability`);
+  }
+  if (!Number.isFinite(rules.speedGain) || rules.speedGain <= 0) throw new MatchError('invalid-config', 'speedGain must be positive and finite');
+  if (!Number.isFinite(rules.maxSpeed) || rules.maxSpeed < rules.speed) throw new MatchError('invalid-config', 'maxSpeed must be finite and at least speed');
   if (!Number.isSafeInteger(rules.tickRate) || rules.tickRate <= 0) throw new MatchError('invalid-config', 'tickRate must be a positive safe integer');
   if (!Number.isFinite(rules.speed) || rules.speed <= 0) throw new MatchError('invalid-config', 'speed must be positive and finite');
   if (!Number.isFinite(rules.radius) || rules.radius <= 0 || rules.radius >= 0.5) throw new MatchError('invalid-config', 'radius must be between 0 and 0.5 cells');

@@ -1,10 +1,12 @@
 # Fake Bomb It
 
-Issues #3–#5 implement a headless movement and bomb prototype on a fixed semantic map. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
+Issues #3–#8 implement a headless movement, bomb and power-up prototype on fixed semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run
 
 Run `pnpm dev` and open <http://127.0.0.1:5173/> to play the fixed-map touch and keyboard training arena. In landscape, use the left four-way joystick and right bomb button; multiple pointers can move and bomb together. Use **WASD / arrow keys**, **Space**, and **R**, or the canvas retry button. **P / Escape** toggles pause; **Enter** or the canvas continue button resumes manually. Leaving the page pauses the match and clears input; returning does not resume it automatically. The three numbered opponents are stationary training targets; AI and the full menu flow belong to later tickets. The canvas shows current walls, breakable blockers, actors, bombs, active fire, event history, countdown, and result without a theme or image pack. The #7 device-validation record is in [touch and pause validation](docs/validation/issue-7-touch-and-pause.md).
+
+Open <http://127.0.0.1:5173/?arena=items> for the power-up practice arena. Move up, then right to collect range, capacity and speed. Its three drops come from real explosions using the normal 50% chance and a fixed seed; a 211-tick preparation clears the fire before controls start. Retry repeats that preparation. The HUD shows live abilities, and distinct symbols/labels identify the three kinds. Bombing two different cells demonstrates capacity; longer fire rays and faster movement show the other gains. The ordinary arena also drops items when crates are destroyed. See [item rules and validation](docs/validation/issue-8-items.md).
 
 The browser uses Vite **8.3.4** and Phaser **3.90.0**, verified against the npm registry and official documentation during implementation. Phaser 3 supplies Canvas/WebGL rendering and the documented scene/scale interfaces; the registry's current Phaser 4 release was also checked. `pnpm build` writes the production browser build to `dist/web`; `pnpm preview` serves it on <http://127.0.0.1:4173/>. Headless output remains in `dist/match` and `dist/demo`.
 
@@ -16,9 +18,11 @@ pnpm check
 pnpm demo
 pnpm demo:bombs
 pnpm demo:chains
+pnpm demo:items
 node dist/demo/movement.js
 node dist/demo/bombs.js
 node dist/demo/chain-reactions.js
+node dist/demo/items.js
 ```
 
 `pnpm check` runs all three TypeScript checks, behavioral tests, the architecture guard, and both builds. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required for those demos or rule tests.
@@ -36,7 +40,7 @@ const retry = createMatch(world.initialization);
 
 These are the three public operations: create a match, advance exactly one logical tick, and read its world. Callers submit cardinal gameplay intents (`up`, `right`, `down`, `left`) or `null` to release movement, with optional `bomb: true` for a one-step action. They never coordinate internal rule updates. Rules and initialization are frozen for each match. Specify `playerId` to enable victory, defeat, timeout, and terminal freeze; it must identify a configured actor and is recorded for retries. Omitting it retains the rules sandbox used by the movement demo, with no match result or timeout.
 
-A semantic map contains positive integer dimensions, row-major `floor` ground cells, separately identified `solid-wall` / `breakable-wall` blockers, and named spawn markers. Actors reference spawn markers and begin at cell centers `(cell.x + 0.5, cell.y + 0.5)`. Multiple actors may use the same spawn. Actors, blockers, bombs, and fire hazards have unique stable entity identities; spawn marker identities are unique within their own namespace. Initial-map data stays unchanged, while current blockers, actors, bombs, hazards, and result are exposed separately in the world snapshot.
+A semantic map contains positive integer dimensions, row-major `floor` ground cells, separately identified `solid-wall` / `breakable-wall` blockers, and named spawn markers. Actors reference spawn markers and begin at cell centers `(cell.x + 0.5, cell.y + 0.5)`. Multiple actors may use the same spawn. Actors, blockers, bombs, fire hazards and items have unique stable entity identities; spawn marker identities are unique within their own namespace. Initial-map data stays unchanged, while current blockers, actors, bombs, hazards, items and result are exposed separately in the world snapshot. Actors expose current `abilities` (`bombCapacity`, `blastRange`, `speed`); initialization rules remain unchanged after pickup.
 
 Positions are continuous cell units along cell center lines: at least one coordinate stays at an integer plus 0.5. Swept cardinal movement stops at the last traversable cell center before a wall, bomb or map edge, including at speeds that cross several cells in one tick. Pressing toward an adjacent wall leaves the actor centered, ready to turn immediately into an open corridor. The rule-defined half-width (`radius`) still controls the actor's square overlap for fire damage and bomb leave permission; sprite dimensions never affect rules. Actors do not block each other. `previousPosition` and `position` provide consecutive tick positions for presentation interpolation. Every snapshot and its nested data are frozen; subsequent ticks do not change earlier snapshots. Caller-owned configuration is copied rather than frozen or retained.
 
@@ -62,7 +66,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `center-line-movement-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Contact-based records (`chain-bombs-v1` / `chain-bombs-v2`) and earlier movement/basic-bomb implementations are rejected because center-line movement produces different outcomes. The seed initializes a dedicated placement-arbitration stream. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `items-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Earlier implementations, including `center-line-movement-v1`, are rejected because item drops, pickup and actor abilities change outcomes. The seed initializes separate placement, drop and pickup streams. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -89,13 +93,13 @@ These defaults are prototype values; the timing boundaries were explicitly confi
 
 Duration ticks are `ceil(seconds * tickRate)`. Bombs store `placedAtTick` and `detonateAtTick`; fire hazards store cells, `createdAtTick`, and exclusive `expiresAtTick`. A bomb placed at tick-start n with fuse F explodes in the explosion phase of n+F. Fire is active on `[explosionTick, explosionTick + fireTicks)`. Movement during the step ending at the expiration boundary still encounters the old fire; movement starting at or after expiration does not. New explosions damage only moved actor positions, without retroactive damage along that step's earlier path. All damage uses the same logical square collision size as movement, with edge contact alone excluded.
 
-Each tick validates input atomically, places bombs at start positions, moves actors and records contact with existing fire along the actual cardinal path (including turn segments), calculates all due explosions against phase-start blockers, destroys obstacles and eliminates actors, then decides the result. Placement checks active capacity and occupied cells before explosion processing, so a bomb due in this step still occupies its cell and consumes capacity during placement. Only the following step can use capacity released by that explosion.
+Each tick validates input atomically, activates eligible pending items, places bombs at start positions, moves actors and records contact with existing fire along the actual cardinal path (including turn segments), calculates all due explosions against phase-start blockers, burns active items, destroys obstacles and spawns pending drops, eliminates actors, settles living actors' pickups, then decides the result. Placement checks current actor capacity and occupied cells before explosion processing, so a bomb due in this step still occupies its cell and consumes capacity during placement. Only the following step can use capacity released by that explosion or an upgrade collected in this step. Each bomb locks the owner's `blastRange` when placed; later range pickups cannot extend that bomb or its chain explosion.
 
 Every actor overlapping a newly placed bomb may leave; the bomb's `exitActorIds` are removed after complete separation. Other actors and actors that already left are blocked. If leave permission ends between centers, reversing toward that bomb stops at the actor's current position rather than moving it backwards to a center; moving away and subsequent center-line turns remain possible. Solid walls stop fire without becoming hazardous. A breakable blocker cell becomes hazardous and is destroyed, stopping that ray. Current collision immediately uses the surviving blockers on the next tick; the initial semantic map remains intact.
 
 One hit eliminates an actor. Eliminated actors retain their identity and final position, but cannot move or place bombs. With `playerId`, result priority is player death → loss, surviving player with no surviving opponents → win, otherwise reaching the time limit → draw. Result and a `match-ended` event appear in that same tick. Later `advanceTick` calls return no events and leave the entire world frozen, including bomb/fire timers.
 
-Events are frozen, carry their logical `tick` and zero-based per-step `order`, and follow phase order: `bomb-placed`, `bomb-exploded`, `blocker-destroyed`, `actor-eliminated`, `match-ended`. Placement uses row-major cell order (y, then x), explosions use lexicographic bomb-ID order after collecting the full chain, destruction uses blocker-ID order, and elimination uses actor-ID order. Identity comparisons use JavaScript string order, not locale-dependent sorting. Hazard expiration is reflected in state rather than a separate event. Use a new match instance for retries and distinguish instances when consuming events.
+Events are frozen, carry their logical `tick` and zero-based per-step `order`, and follow phase order: `bomb-placed`, `bomb-exploded`, `item-destroyed`, `blocker-destroyed`, `item-spawned`, `actor-eliminated`, `item-collected`, `match-ended`. Placement and item settlement use row-major cell order (y, then x), explosions use lexicographic bomb-ID order after collecting the full chain, destruction uses blocker-ID order, and elimination uses actor-ID order. Identity comparisons use JavaScript string order, not locale-dependent sorting. Hazard expiration and item activation are reflected in state rather than separate events. Use a new match instance for retries and distinguish instances when consuming events.
 
 ## Chains and same-cell arbitration
 
@@ -103,7 +107,25 @@ An explosion ignites every bomb on its fire cells in that same phase. Bombs touc
 
 Before arbitration, placement filters eliminated actors, full capacities, and occupied cells. Candidates are grouped by their start cell; groups run in row-major order and candidates use actor-ID order. Each contested group draws one winner; single valid requests need no random draw. Only successful placement consumes capacity. Leave permission belongs to every living actor overlapping the new bomb, including losers and actors that did not request placement.
 
-`arbitration.ts` owns one private, reproducible stream. Its seed is a UTF-16 FNV-1a hash of `fakebombit:placement-arbitration:v1` + a NUL separator + the match seed. A 32-bit LCG advances state; a bijective bit mixer removes raw low-bit patterns, and rejection sampling maps output to a candidate index without modulo bias. Other rule work, solo/invalid/occupied placement requests, snapshots, and presentation do not consume it. The algorithm, namespace, ordering, and consumption rules belong to `chain-bombs-v1`; changing them requires an implementation version change. Retry recreates the stream and replays inputs from initialization.
+The placement stream seed is a UTF-16 FNV-1a hash of `fakebombit:placement-arbitration:v1` + a NUL separator + the match seed. A 32-bit LCG advances state; a bijective bit mixer removes raw low-bit patterns, and rejection sampling maps output to a candidate index without modulo bias. Other rule work, solo/invalid/occupied placement requests, snapshots, and presentation do not consume it. Its algorithm, namespace and consumption remain those introduced with `chain-bombs-v1`. Drop and pickup streams use the same sampler with independent `item-drop` and `item-pickup` namespaces. Changing algorithms, ordering or consumption requires an implementation version change. Retry recreates all streams and replays inputs from initialization.
+
+## Power-ups
+
+User-confirmed #8 rules and boundary evidence are recorded in [item validation](docs/validation/issue-8-items.md).
+
+| Rule | Default | Accepted range |
+| --- | --- | --- |
+| `itemDropChance` | 0.5 | Finite number in [0, 1] |
+| `capacityGain` / `rangeGain` | 1 / 1 | Positive safe integers |
+| `speedGain` | 0.5 cells/second | Positive finite number |
+| `maxBombCapacity` / `maxBlastRange` | 4 / 6 | Safe integers at least their initial ability |
+| `maxSpeed` | 5 cells/second | Finite number at least initial speed |
+
+Omitted caps resolve to the greater of their default and initial ability, preserving existing high-speed/capacity scenarios. Explicit caps below initial abilities are invalid. A pickup consumes its instance even at the cap; the collected event exposes the resulting abilities, and the ability never decreases.
+
+Each destroyed breakable blocker consumes a 32-bit probability draw, in row-major cell order; a successful drop consumes a uniform three-way kind draw. `ItemState.type` is `item.capacity`, `item.range` or `item.speed`. New items have `active: false` and `spawnedAtTick`. All fire on their cell must disappear before the next step activates them. Pending items are protected from overlapping fire; active items burn when a new explosion reaches them. This permits safe pickup after the creating fire, while later bombing can destroy an available item.
+
+Pickup occurs after damage and before the match result. Only living actors whose final cell contains an active item participate; crossing a cell without ending there does not collect it. Contenders sort by actor ID and use a dedicated pickup stream; one valid actor needs no draw. Each instance is consumed once. Movement and placement use pre-pickup abilities, so increases take effect on the next step. `pnpm demo:items` demonstrates actual capacity, blast and travel differences through the public match operations, with initialization replay checks.
 
 ## Architecture guard
 

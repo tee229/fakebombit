@@ -7,6 +7,7 @@ import { trainingMatchConfig } from './training-map.js';
 import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
+import { createItemTrainingMatch } from './item-training.js';
 import './style.css';
 
 // This is the only composition root: input -> game flow -> readonly state/events -> Phaser view.
@@ -20,11 +21,12 @@ class TrainingScene extends Phaser.Scene {
   constructor() { super('training'); }
 
   create(): void {
-    const match = createMatch(trainingMatchConfig);
+    const itemTraining = new URLSearchParams(window.location.search).get('arena') === 'items';
+    const match = itemTraining ? createItemTrainingMatch() : createMatch(trainingMatchConfig);
     const input = createPlayerInput();
     this.inputState = input;
     this.session = createGameSession(match, input);
-    const view = new EntitiesView(this, match.readWorld());
+    const view = new EntitiesView(this, match.readWorld(), itemTraining);
     this.view = view;
     this.lastResult = '';
     this.phase = 'playing';
@@ -73,7 +75,7 @@ class TrainingScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
     this.game.canvas.tabIndex = 0;
     this.game.canvas.setAttribute('role', 'application');
-    this.game.canvas.setAttribute('aria-label', '实体训练场：玩家、固定墙、可破坏障碍及三个静止目标');
+    this.game.canvas.setAttribute('aria-label', itemTraining ? '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标' : '实体训练场：玩家、墙、障碍、三类道具及三个静止目标');
     this.game.canvas.setAttribute('aria-describedby', 'instructions');
     this.game.canvas.focus({ preventScroll: true });
     const status = document.getElementById('game-status');
@@ -116,10 +118,18 @@ class TrainingScene extends Phaser.Scene {
     canvas.dataset.playerY = player.position.y.toFixed(3);
     canvas.dataset.bombs = String(frame.world.bombs.length);
     canvas.dataset.hazards = String(frame.world.hazards.length);
+    canvas.dataset.items = String(frame.world.items.length);
+    canvas.dataset.capacity = String(player.abilities.bombCapacity);
+    canvas.dataset.range = String(player.abilities.blastRange);
+    canvas.dataset.speed = String(player.abilities.speed);
     canvas.dataset.result = frame.world.result?.outcome ?? 'playing';
     canvas.dataset.phase = frame.phase;
     canvas.dataset.pauseReason = frame.pauseReason ?? '';
     canvas.dataset.joystick = touch.direction ?? '';
+    if (frame.events.some(event => event.type === 'item-collected' && event.actorId === player.id)) {
+      const status = document.getElementById('game-status');
+      if (status) status.textContent = `已拾取道具。容量 ${player.abilities.bombCapacity}，距离 ${player.abilities.blastRange} 格，速度 ${player.abilities.speed} 格每秒。`;
+    }
     const result = frame.world.result?.outcome ?? '';
     if (result && result !== this.lastResult) {
       this.lastResult = result;

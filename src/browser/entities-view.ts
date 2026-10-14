@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import type { GameplayEvent, WorldState } from '../match/index.js';
+import type { GameplayEvent, ItemKind, WorldState } from '../match/index.js';
 import { resultLabels } from './result-labels.js';
 import { interpolatePosition } from './interpolate-position.js';
 import { arenaLayout } from './layout.js';
@@ -10,6 +10,11 @@ const colors = {
 };
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
 const board = arenaLayout.board;
+const itemDisplay = {
+  'item.capacity': { label: '容量', color: 0xf1ca7c, ink: '#f1ca7c', ability: 'bombCapacity' },
+  'item.range': { label: '距离', color: 0xffaf8c, ink: '#ffaf8c', ability: 'blastRange' },
+  'item.speed': { label: '速度', color: 0x83dfb6, ink: '#83dfb6', ability: 'speed' },
+} as const;
 
 /** The view reads gameplay facts; drawing and event history never alter the match. */
 export class EntitiesView {
@@ -26,18 +31,19 @@ export class EntitiesView {
   private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
 
-  constructor(private readonly scene: Phaser.Scene, world: WorldState) {
+  constructor(private readonly scene: Phaser.Scene, world: WorldState, itemTraining = false) {
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
     this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
-    this.text(24, 63, '实体训练场 · 横屏游玩', 20, '#b8d1c6');
+    this.text(24, 63, itemTraining ? '道具练习场 · 横屏游玩' : '实体训练场 · 横屏游玩', 20, '#b8d1c6');
     this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
-    this.capacity = this.text(386, 58, '', 20, '#b8d1c6');
+    this.capacity = this.text(350, 58, '', 18, '#b8d1c6');
     this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
-    this.history = this.text(24, 152, '放弹后\n离开十字范围', 18, '#b8d1c6');
+    this.history = this.text(24, 150, itemTraining ? '上行，再右移\n依次拾取上方道具' : '炸开障碍后\n等火焰消失再拾取', 16, '#b8d1c6');
+    for (const [index, display] of Object.values(itemDisplay).entries()) this.text(52, 210 + index * 23, display.label, 16, display.ink);
     this.text(24, 538, 'WASD / 方向键', 18, '#b8d1c6');
     const legend = [['固定墙', '#79958c'], ['可破坏障碍', '#f1ca7c'], ['炸弹', '#eaf3ed'], ['有效火焰', '#ffaf8c']] as const;
     for (const [index, [label, color]] of legend.entries()) this.text(274 + index * 135, 543, label, 16, color);
@@ -65,11 +71,17 @@ export class EntitiesView {
       const descriptions: Record<GameplayEvent['type'], string> = {
         'bomb-placed': '放下炸弹', 'bomb-exploded': '炸弹引爆', 'blocker-destroyed': '障碍被炸开',
         'actor-eliminated': '角色淘汰', 'match-ended': '本局结束',
+        'item-spawned': '出现道具', 'item-collected': '拾取道具', 'item-destroyed': '道具被烧毁',
       };
-      this.changes.unshift(`${seconds}s ${descriptions[event.type]}`);
-      this.changes.length = Math.min(this.changes.length, 3);
+      let description = descriptions[event.type];
+      if (event.type === 'item-collected') {
+        const display = itemDisplay[event.kind];
+        description = event.actorId === world.initialization.playerId ? `${display.label}升至 ${event.abilities[display.ability]}` : `目标拾取${display.label}`;
+      }
+      this.changes.unshift(`${seconds}s ${description}`);
+      this.changes.length = Math.min(this.changes.length, 2);
     }
-    if (this.changes.length) this.history.setText(this.changes.join('\n')).setLineSpacing(12);
+    if (this.changes.length) this.history.setText(this.changes.join('\n')).setLineSpacing(8);
     const g = this.graphics.clear();
     g.lineStyle(1, colors.grid);
     for (let y = 0; y < world.initialMap.height; y++) {
@@ -86,6 +98,7 @@ export class EntitiesView {
       if (wall.type === 'breakable-wall') { g.lineBetween(x + 10, y + 10, x + 36, y + 36); g.lineBetween(x + 36, y + 10, x + 10, y + 36); }
       else g.lineBetween(x + 10, y + 13, x + 36, y + 13);
     }
+    for (const item of world.items) this.drawItem(item.type, board.x + item.x * board.cell + 30, board.y + item.y * board.cell + 30, item.active ? 1 : 0.4);
     for (const hazard of world.hazards) {
       for (const cell of hazard.cells) {
         const x = board.x + cell.x * board.cell + 30, y = board.y + cell.y * board.cell + 30;
@@ -122,9 +135,11 @@ export class EntitiesView {
     g.lineStyle(2, colors.ink).strokeCircle(527, 551, 9);
     g.fillStyle(colors.fire).fillRect(653, 542, 18, 18);
     g.lineStyle(2, 0xffdec5).lineBetween(657, 551, 667, 551).lineBetween(662, 546, 662, 556);
+    for (const [index, kind] of (['item.capacity', 'item.range', 'item.speed'] as const).entries()) this.drawItem(kind, 34, 219 + index * 23);
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
     this.progress.setText(`目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
-    this.capacity.setText(`已放炸弹  ${world.bombs.filter(bomb => bomb.ownerId === world.initialization.playerId).length} / ${world.initialization.rules.bombCapacity}`);
+    const player = world.actors.find(actor => actor.id === world.initialization.playerId);
+    if (player) this.capacity.setText(`炸弹 ${world.bombs.filter(bomb => bomb.ownerId === player.id).length}/${player.abilities.bombCapacity} · 距离 ${player.abilities.blastRange} · 速度 ${Number(player.abilities.speed.toFixed(2))}`);
     const remaining = Math.max(0, Math.ceil(world.initialization.rules.matchDurationSeconds - world.tick / world.initialization.rules.tickRate));
     this.timer.setText(`${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`);
     this.result.setVisible(world.result !== null);
@@ -133,6 +148,22 @@ export class EntitiesView {
   }
 
   destroy(): void { this.root.destroy(true); }
+
+  private drawItem(kind: ItemKind, x: number, y: number, alpha = 1): void {
+    const g = this.graphics;
+    g.fillStyle(colors.background, alpha).fillRoundedRect(x - 13, y - 10, 26, 20, 3);
+    g.lineStyle(2, itemDisplay[kind].color, alpha);
+    if (kind === 'item.capacity') g.strokeCircle(x - 5, y, 5).strokeCircle(x + 5, y, 5);
+    if (kind === 'item.range') {
+      g.lineBetween(x - 9, y, x + 9, y).lineBetween(x, y - 8, x, y + 8);
+      g.lineBetween(x - 9, y, x - 5, y - 4).lineBetween(x + 9, y, x + 5, y + 4);
+      g.lineBetween(x, y - 8, x + 4, y - 4).lineBetween(x, y + 8, x - 4, y + 4);
+    }
+    if (kind === 'item.speed') {
+      g.lineBetween(x - 8, y - 6, x - 2, y).lineBetween(x - 2, y, x - 8, y + 6);
+      g.lineBetween(x + 1, y - 6, x + 7, y).lineBetween(x + 7, y, x + 1, y + 6);
+    }
+  }
 
   private text(x: number, y: number, content: string, size: number, color: string, weight = 'normal'): Phaser.GameObjects.Text {
     const text = this.scene.add.text(x, y, content, { fontFamily: font, fontSize: `${size}px`, fontStyle: weight, color });

@@ -1,6 +1,10 @@
 // This stream belongs only to same-cell placement conflicts, never other rules or presentation.
 export function createArbitrationRandom(seed: string): (size: number) => number {
-  const text = `fakebombit:placement-arbitration:v1\0${seed}`;
+  return createGameplayRandom(seed, 'placement-arbitration');
+}
+
+export function createGameplayRandom(seed: string, stream: string): (size: number) => number {
+  const text = `fakebombit:${stream}:v1\0${seed}`;
   let state = 2166136261;
   for (let index = 0; index < text.length; index++) {
     state = Math.imul(state ^ text.charCodeAt(index), 16777619) >>> 0;
