@@ -23,7 +23,7 @@ export class EntitiesView {
   private readonly actorLabels = new Map<string, Phaser.GameObjects.Text>();
   private readonly timer: Phaser.GameObjects.Text;
   private readonly progress: Phaser.GameObjects.Text;
-  private readonly capacity: Phaser.GameObjects.Text;
+  private readonly abilitiesLabel: Phaser.GameObjects.Text;
   private readonly history: Phaser.GameObjects.Text;
   private readonly result: Phaser.GameObjects.Container;
   private readonly resultTitle: Phaser.GameObjects.Text;
@@ -40,7 +40,7 @@ export class EntitiesView {
     this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
-    this.capacity = this.text(350, 58, '', 18, '#b8d1c6');
+    this.abilitiesLabel = this.text(350, 58, '', 18, '#b8d1c6');
     this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
     this.history = this.text(24, 150, itemTraining ? '上行，再右移\n依次拾取上方道具' : '炸开障碍后\n等火焰消失再拾取', 16, '#b8d1c6');
     for (const [index, display] of Object.values(itemDisplay).entries()) this.text(52, 210 + index * 23, display.label, 16, display.ink);
@@ -139,7 +139,7 @@ export class EntitiesView {
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
     this.progress.setText(`目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
     const player = world.actors.find(actor => actor.id === world.initialization.playerId);
-    if (player) this.capacity.setText(`炸弹 ${world.bombs.filter(bomb => bomb.ownerId === player.id).length}/${player.abilities.bombCapacity} · 距离 ${player.abilities.blastRange} · 速度 ${Number(player.abilities.speed.toFixed(2))}`);
+    if (player) this.abilitiesLabel.setText(`炸弹 ${world.bombs.filter(bomb => bomb.ownerId === player.id).length}/${player.abilities.bombCapacity} · 距离 ${player.abilities.blastRange} · 速度 ${Number(player.abilities.speed.toFixed(2))}`);
     const remaining = Math.max(0, Math.ceil(world.initialization.rules.matchDurationSeconds - world.tick / world.initialization.rules.tickRate));
     this.timer.setText(`${String(Math.floor(remaining / 60)).padStart(2, '0')}:${String(remaining % 60).padStart(2, '0')}`);
     this.result.setVisible(world.result !== null);
