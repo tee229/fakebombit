@@ -9,6 +9,7 @@ import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
 import { createItemTrainingMatch } from './item-training.js';
 import { createEscapeTrainingMatch } from './escape-training.js';
+import { createNormalTrainingMatch } from './normal-training.js';
 import './style.css';
 
 // This is the only composition root: input -> game flow -> readonly state/events -> Phaser view.
@@ -25,7 +26,7 @@ class TrainingScene extends Phaser.Scene {
   create(): void {
     const url = new URL(window.location.href);
     const requestedArena = url.searchParams.get('arena');
-    const arena = requestedArena === 'items' || requestedArena === 'escape' || requestedArena === 'training' ? requestedArena : 'generated';
+    const arena = requestedArena === 'items' || requestedArena === 'escape' || requestedArena === 'training' || requestedArena === 'normal' ? requestedArena : 'generated';
     const canvas = this.game.canvas;
     for (const key of Object.keys(canvas.dataset)) delete canvas.dataset[key];
     let match: Match | undefined;
@@ -34,9 +35,14 @@ class TrainingScene extends Phaser.Scene {
       if (arena === 'generated') {
         const seed = url.searchParams.get('seed') ?? freshSeed();
         url.searchParams.set('seed', seed); window.history.replaceState(null, '', url);
-        match = createMatch(this.initialization ?? { seed, generator: {}, playerId: 'player', actors: trainingMatchConfig.actors });
+        const requestedCount = Number(url.searchParams.get('ai'));
+        const aiCount = [1, 2, 3].includes(requestedCount) ? requestedCount : 3;
+        const requestedSeconds = Number(url.searchParams.get('seconds'));
+        const matchDurationSeconds = Number.isInteger(requestedSeconds) && requestedSeconds >= 1 && requestedSeconds <= 120 ? requestedSeconds : 120;
+        const actors = ['player', 'target-1', 'target-2', 'target-3'].slice(0, aiCount + 1).map(id => ({ id, type: 'actor' as const, spawnId: id, ...(id === 'player' ? {} : { ai: { mode: 'normal' as const } }) }));
+        match = createMatch(this.initialization ?? { seed, generator: {}, playerId: 'player', actors, rules: { matchDurationSeconds } });
         this.initialization = match.readWorld().initialization;
-      } else match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : createMatch(trainingMatchConfig);
+      } else match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : arena === 'normal' ? createNormalTrainingMatch() : createMatch(trainingMatchConfig);
     } catch (error) {
       if (!(error instanceof MatchError)) throw error;
       failure = error;
@@ -65,6 +71,7 @@ class TrainingScene extends Phaser.Scene {
       canvas.dataset.mapWidth = String(world.initialMap.width); canvas.dataset.mapHeight = String(world.initialMap.height);
       canvas.dataset.generationSource = world.initialization.generation?.source ?? 'fixed';
       canvas.dataset.generationAttempts = String(world.initialization.generation?.attempts.length ?? 0);
+      canvas.dataset.aiCount = String(world.actors.filter(actor => actor.ai).length);
     }
     const keyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
@@ -110,7 +117,7 @@ class TrainingScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
     this.game.canvas.tabIndex = 0;
     this.game.canvas.setAttribute('role', 'application');
-    const arenaLabels = { generated: '种子地图：四角对称的随机地图，R 重试，N 新开一局', training: '实体训练场：玩家、墙、障碍、三类道具，一个逃生 AI 及两个静止目标', items: '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标', escape: '逃生练习场：观察 AI 从两颗已知炸弹的连锁范围逃生，R 重放' };
+    const arenaLabels = { generated: `种子地图：1 名玩家对 ${canvas.dataset.aiCount ?? 3} 名正常 AI，R 重试，N 新开一局`, normal: '正常 AI 练习场：原地放弹封住出口，再左移下行躲开爆炸，R 重试', training: '实体训练场：玩家、墙、障碍、三类道具，一个逃生 AI 及两个静止目标', items: '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标', escape: '逃生练习场：观察 AI 从两颗已知炸弹的连锁范围逃生，R 重放' };
     this.game.canvas.setAttribute('aria-label', `${arenaLabels[arena]}。种子：${canvas.dataset.seed ?? url.searchParams.get('seed') ?? ''}`);
     this.game.canvas.setAttribute('aria-describedby', 'instructions');
     this.game.canvas.focus({ preventScroll: true });
@@ -176,6 +183,7 @@ class TrainingScene extends Phaser.Scene {
     canvas.dataset.aiY = enemy?.position.y.toFixed(3) ?? '';
     canvas.dataset.aiStatus = enemy?.ai?.status ?? '';
     canvas.dataset.aiAlive = String(enemy?.alive ?? false);
+    canvas.dataset.opponents = JSON.stringify(frame.world.actors.filter(actor => actor.id !== player.id).map(actor => ({ id: actor.id, alive: actor.alive, position: actor.position, abilities: actor.abilities, ai: actor.ai })));
     if (frame.events.some(event => event.type === 'item-collected' && event.actorId === player.id)) {
       const status = document.getElementById('game-status');
       if (status) status.textContent = `已拾取道具。容量 ${player.abilities.bombCapacity}，距离 ${player.abilities.blastRange} 格，速度 ${player.abilities.speed} 格每秒。`;

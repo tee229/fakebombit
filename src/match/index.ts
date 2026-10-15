@@ -6,11 +6,14 @@ export type { MatchErrorCode } from './errors.js';
 export { MapGenerationError } from './generation.js';
 import { moveActor, overlapsCell, pathTouchesCell, vectors } from './motion.js';
 import { aiDefaults, createEscapeController, type EscapeAiConfig, type EscapeAiState } from './escape-ai.js';
+import { normalAiDefaults, createNormalController, type NormalAiConfig, type NormalAiState } from './normal-ai.js';
 import { calculateExplosions } from './explosions.js';
 import { freeze } from './immutable.js';
 import { createArbitrationRandom, createGameplayRandom } from './arbitration.js';
 
 export type { EscapeAiConfig, EscapeAiState };
+export type { NormalAiConfig, NormalAiState };
+export type AiConfig = Partial<EscapeAiConfig> | (Partial<NormalAiConfig> & { readonly mode: 'normal' });
 
 export type Direction = 'up' | 'right' | 'down' | 'left';
 export interface Position {
@@ -28,7 +31,7 @@ export interface SemanticMap {
   readonly blockers: readonly Blocker[];
   readonly spawns: readonly (Position & { readonly id: string })[];
 }
-export interface ActorConfig { readonly id: string; readonly type: 'actor'; readonly spawnId: string; readonly ai?: Partial<EscapeAiConfig> }
+export interface ActorConfig { readonly id: string; readonly type: 'actor'; readonly spawnId: string; readonly ai?: AiConfig }
 export interface MovementRules {
   readonly tickRate: number;
   readonly speed: number;
@@ -159,7 +162,7 @@ export interface ActorState {
   readonly heading: Direction | null;
   readonly alive: boolean;
   readonly abilities: ActorAbilities;
-  readonly ai?: EscapeAiState;
+  readonly ai?: EscapeAiState | NormalAiState;
 }
 export interface InitializationRecord {
   readonly generation?: GenerationRecord;
@@ -192,7 +195,7 @@ const defaults: MatchRules = {
   capacityGain: 1, rangeGain: 1, speedGain: 0.5,
   maxBombCapacity: 4, maxBlastRange: 6, maxSpeed: 5,
 };
-const versions = { match: 'generated-map-v1', map: 'semantic-map-v1', generator: 'symmetric-map-v1', ai: 'escape-ai-v1' };
+const versions = { match: 'normal-battle-v1', map: 'semantic-map-v1', generator: 'symmetric-map-v1', ai: 'normal-ai-v1' };
 
 export function createMatch(source: MatchConfig | GeneratedMatchConfig | InitializationRecord): Match {
   validateConfig(source);
@@ -216,8 +219,9 @@ export function createMatch(source: MatchConfig | GeneratedMatchConfig | Initial
 
   const actorConfigs: ActorConfig[] = config.actors.map(actor => ({ id: actor.id, type: actor.type, spawnId: actor.spawnId,
     ...(actor.ai === undefined ? {} : { ai: resolveAiConfig(actor.ai, rules.tickRate) }) }));
-  const controllers = new Map<string, ReturnType<typeof createEscapeController>>();
-  for (const actor of actorConfigs) if (actor.ai) controllers.set(actor.id, createEscapeController({ ...aiDefaults, ...actor.ai }));
+  const controllers = new Map<string, ReturnType<typeof createEscapeController> | ReturnType<typeof createNormalController>>();
+  for (const actor of actorConfigs) if (actor.ai) controllers.set(actor.id, 'mode' in actor.ai
+    ? createNormalController({ ...normalAiDefaults, ...actor.ai }, createGameplayRandom(config.seed, `ai:${actor.id}`)) : createEscapeController({ ...aiDefaults, ...actor.ai }));
   const map: SemanticMap = {
     width: config.map.width,
     height: config.map.height,
@@ -408,8 +412,12 @@ function validateConfig(config: unknown): void {
       throw new MatchError('invalid-config', 'Actors require unique identities, entity types, and spawn references');
     }
     actorIds.add(actor.id);
-    if (Object.hasOwn(actor, 'ai') && (!isRecord(actor.ai) || Object.keys(actor.ai).some(key => !Object.hasOwn(aiDefaults, key)))) {
-      throw new MatchError('invalid-config', 'AI must specify supported escape settings');
+    if (Object.hasOwn(actor, 'ai')) {
+      const settings = actor.ai;
+      if (!isRecord(settings) || (Object.hasOwn(settings, 'mode') && settings.mode !== 'normal')
+        || Object.keys(settings).some(key => !Object.hasOwn(settings.mode === 'normal' ? normalAiDefaults : aiDefaults, key))) {
+        throw new MatchError('invalid-config', 'AI must specify supported settings');
+      }
     }
   }
   if (Object.hasOwn(config, 'playerId') && (!nonempty(config.playerId) || !actorIds.has(config.playerId))) {
@@ -419,13 +427,16 @@ function validateConfig(config: unknown): void {
     throw new MatchError('invalid-config', 'Match rules must contain supported rule keys');
   }
 }
-function resolveAiConfig(config: Partial<EscapeAiConfig>, tickRate: number): EscapeAiConfig {
-  const resolved = { ...aiDefaults, ...config };
+function resolveAiConfig(config: AiConfig, tickRate: number): EscapeAiConfig | NormalAiConfig {
+  const resolved = 'mode' in config ? { ...normalAiDefaults, ...config } : { ...aiDefaults, ...config };
   for (const key of ['reactionSeconds', 'decisionIntervalSeconds', 'searchHorizonSeconds'] as const) {
     if (!Number.isFinite(resolved[key]) || (key === 'reactionSeconds' ? resolved[key] < 0 : resolved[key] <= 0)
       || !Number.isSafeInteger(Math.ceil(resolved[key] * tickRate))) throw new MatchError('invalid-config', `${key} must resolve to a valid AI tick duration`);
   }
   if (!Number.isSafeInteger(resolved.maxSearchStates) || resolved.maxSearchStates <= 0) throw new MatchError('invalid-config', 'maxSearchStates must be a positive safe integer');
+  if ('mode' in resolved) for (const key of ['pickupWeight', 'crateWeight', 'threatWeight'] as const) {
+    if (!Number.isFinite(resolved[key]) || resolved[key] < 0) throw new MatchError('invalid-config', `${key} must be finite and nonnegative`);
+  }
   return resolved;
 }
 function validateRules(rules: MatchRules): void {

@@ -1,5 +1,5 @@
 export const resultLabels = Object.freeze({
-  won: '练习完成',
+  won: '你赢了',
   lost: '被炸中了',
   draw: '时间到',
 });

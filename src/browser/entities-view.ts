@@ -15,7 +15,7 @@ const itemDisplay = {
   'item.range': { label: '距离', color: 0xffaf8c, ink: '#ffaf8c', ability: 'blastRange' },
   'item.speed': { label: '速度', color: 0x83dfb6, ink: '#83dfb6', ability: 'speed' },
 } as const;
-const aiLabels = { observing: '观察中', safe: '安全', escaping: '逃生中', 'no-route': '未找到安全路', 'budget-exhausted': '搜索预算不足', eliminated: '已淘汰' } as const;
+const aiLabels = { observing: '观察中', safe: '安全', escaping: '逃生中', collecting: '拾取道具', breaking: '炸开障碍', threatening: '接近对手', 'no-route': '未找到安全路', 'budget-exhausted': '搜索预算不足', eliminated: '已淘汰' } as const;
 
 /** The view reads gameplay facts; drawing and event history never alter the match. */
 export class EntitiesView {
@@ -34,7 +34,7 @@ export class EntitiesView {
   private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
 
-  constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly arena: 'generated' | 'training' | 'items' | 'escape' = 'training') {
+  constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly arena: 'generated' | 'training' | 'items' | 'escape' | 'normal' = 'training') {
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
@@ -45,14 +45,14 @@ export class EntitiesView {
     this.boardGraphics = scene.add.graphics();
     this.boardRoot.add(this.boardGraphics); this.root.add(this.boardRoot);
     this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
-    const arenaTitles = { generated: '种子地图', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
-    this.text(24, 63, `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
+    const arenaTitles = { generated: '种子地图', normal: '正常 AI 练习场', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
+    this.text(24, 63, this.arena === 'generated' ? `1 对 ${world.actors.length - 1} · 正常难度` : `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
     this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
     this.abilitiesLabel = this.text(350, 58, '', 18, '#b8d1c6');
     this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
-    const arenaHelp = { generated: '炸开障碍后\n等火焰消失再拾取', training: '炸开障碍后\n等火焰消失再拾取', items: '上行，再右移\n依次拾取上方道具', escape: '观察 AI 躲开连锁\nR 可重放同一场景' };
+    const arenaHelp = { generated: '找道具，炸开通路\n注意 AI 的炸弹', normal: '原地放弹封口\n左移、下行躲开', training: '炸开障碍后\n等火焰消失再拾取', items: '上行，再右移\n依次拾取上方道具', escape: '观察 AI 躲开连锁\nR 可重放同一场景' };
     this.history = this.text(24, 150, arenaHelp[this.arena], 16, '#b8d1c6');
     for (const [index, display] of Object.values(itemDisplay).entries()) this.text(52, 210 + index * 23, display.label, 16, display.ink);
     this.text(24, 538, 'WASD / 方向键', 18, '#b8d1c6');
@@ -64,7 +64,7 @@ export class EntitiesView {
     for (const [index, [label, color]] of legend.entries()) this.text(274 + index * 135, 543, label, 16, color);
 
     world.actors.forEach((actor, index) => {
-      const label = actor.id === world.initialization.playerId ? 'P' : actor.ai ? 'AI' : String(index).padStart(2, '0');
+      const label = actor.id === world.initialization.playerId ? 'P' : actor.ai ? this.arena === 'generated' || this.arena === 'normal' ? `A${index}` : 'AI' : String(index).padStart(2, '0');
       const text = this.text(0, 0, label, 18, '#102b2c', '700').setOrigin(0.5);
       this.boardRoot.add(text); text.setScale(Math.min(18, cell * 0.55) / 18 / scale);
       this.actorLabels.set(actor.id, text);
@@ -156,7 +156,7 @@ export class EntitiesView {
     for (const [index, kind] of (['item.capacity', 'item.range', 'item.speed'] as const).entries()) this.drawItem(legend, kind, 34, 219 + index * 23);
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
     const ai = opponents.find(actor => actor.ai)?.ai;
-    this.progress.setText(ai && this.arena === 'escape' ? `AI：${aiLabels[ai.status]}` : `目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
+    this.progress.setText(ai && this.arena === 'escape' ? `AI：${aiLabels[ai.status]}` : `${this.arena === 'generated' ? '对手' : '目标'}剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
     const player = world.actors.find(actor => actor.id === world.initialization.playerId);
     if (player) this.abilitiesLabel.setText(`炸弹 ${world.bombs.filter(bomb => bomb.ownerId === player.id).length}/${player.abilities.bombCapacity} · 距离 ${player.abilities.blastRange} · 速度 ${Number(player.abilities.speed.toFixed(2))}`);
     const remaining = Math.max(0, Math.ceil(world.initialization.rules.matchDurationSeconds - world.tick / world.initialization.rules.tickRate));
