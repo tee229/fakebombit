@@ -5,4 +5,3 @@ export class MatchError extends Error {
     this.name = 'MatchError';
   }
 }
-
