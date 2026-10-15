@@ -19,5 +19,5 @@ export const trainingMatchConfig: MatchConfig = {
   map: { width, height, ground: Array.from({ length: width * height }, () => 'floor'), blockers, spawns: [
     { id: 'player', x: 1, y: 1 }, { id: 'target-1', x: 7, y: 1 }, { id: 'target-2', x: 7, y: 5 }, { id: 'target-3', x: 1, y: 5 },
   ] },
-  actors: ['player', 'target-1', 'target-2', 'target-3'].map(id => ({ id, type: 'actor', spawnId: id })),
+  actors: ['player', 'target-1', 'target-2', 'target-3'].map(id => ({ id, type: 'actor', spawnId: id, ...(id === 'target-1' ? { ai: {} } : {}) })),
 };

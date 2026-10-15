@@ -8,6 +8,7 @@ import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
 import { createItemTrainingMatch } from './item-training.js';
+import { createEscapeTrainingMatch } from './escape-training.js';
 import './style.css';
 
 // This is the only composition root: input -> game flow -> readonly state/events -> Phaser view.
@@ -21,12 +22,13 @@ class TrainingScene extends Phaser.Scene {
   constructor() { super('training'); }
 
   create(): void {
-    const itemTraining = new URLSearchParams(window.location.search).get('arena') === 'items';
-    const match = itemTraining ? createItemTrainingMatch() : createMatch(trainingMatchConfig);
+    const requestedArena = new URLSearchParams(window.location.search).get('arena');
+    const arena = requestedArena === 'items' || requestedArena === 'escape' ? requestedArena : 'training';
+    const match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : createMatch(trainingMatchConfig);
     const input = createPlayerInput();
     this.inputState = input;
     this.session = createGameSession(match, input);
-    const view = new EntitiesView(this, match.readWorld(), itemTraining);
+    const view = new EntitiesView(this, match.readWorld(), arena);
     this.view = view;
     this.lastResult = '';
     this.phase = 'playing';
@@ -75,7 +77,8 @@ class TrainingScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
     this.game.canvas.tabIndex = 0;
     this.game.canvas.setAttribute('role', 'application');
-    this.game.canvas.setAttribute('aria-label', itemTraining ? '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标' : '实体训练场：玩家、墙、障碍、三类道具及三个静止目标');
+    const arenaLabels = { training: '实体训练场：玩家、墙、障碍、三类道具，一个逃生 AI 及两个静止目标', items: '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标', escape: '逃生练习场：观察 AI 从两颗已知炸弹的连锁范围逃生，R 重放' };
+    this.game.canvas.setAttribute('aria-label', arenaLabels[arena]);
     this.game.canvas.setAttribute('aria-describedby', 'instructions');
     this.game.canvas.focus({ preventScroll: true });
     const status = document.getElementById('game-status');
@@ -126,6 +129,11 @@ class TrainingScene extends Phaser.Scene {
     canvas.dataset.phase = frame.phase;
     canvas.dataset.pauseReason = frame.pauseReason ?? '';
     canvas.dataset.joystick = touch.direction ?? '';
+    const enemy = frame.world.actors.find(actor => actor.ai);
+    canvas.dataset.aiX = enemy?.position.x.toFixed(3) ?? '';
+    canvas.dataset.aiY = enemy?.position.y.toFixed(3) ?? '';
+    canvas.dataset.aiStatus = enemy?.ai?.status ?? '';
+    canvas.dataset.aiAlive = String(enemy?.alive ?? false);
     if (frame.events.some(event => event.type === 'item-collected' && event.actorId === player.id)) {
       const status = document.getElementById('game-status');
       if (status) status.textContent = `已拾取道具。容量 ${player.abilities.bombCapacity}，距离 ${player.abilities.blastRange} 格，速度 ${player.abilities.speed} 格每秒。`;

@@ -1,4 +1,10 @@
+import { moveActor, overlapsCell, pathTouchesCell, vectors } from './motion.js';
+import { aiDefaults, createEscapeController, type EscapeAiConfig, type EscapeAiState } from './escape-ai.js';
+import { calculateExplosions } from './explosions.js';
+import { freeze } from './immutable.js';
 import { createArbitrationRandom, createGameplayRandom } from './arbitration.js';
+
+export type { EscapeAiConfig, EscapeAiState };
 
 export type Direction = 'up' | 'right' | 'down' | 'left';
 export interface Position {
@@ -16,7 +22,7 @@ export interface SemanticMap {
   readonly blockers: readonly Blocker[];
   readonly spawns: readonly (Position & { readonly id: string })[];
 }
-export interface ActorConfig { readonly id: string; readonly type: 'actor'; readonly spawnId: string }
+export interface ActorConfig { readonly id: string; readonly type: 'actor'; readonly spawnId: string; readonly ai?: Partial<EscapeAiConfig> }
 export interface MovementRules {
   readonly tickRate: number;
   readonly speed: number;
@@ -145,6 +151,7 @@ export interface ActorState {
   readonly heading: Direction | null;
   readonly alive: boolean;
   readonly abilities: ActorAbilities;
+  readonly ai?: EscapeAiState;
 }
 export interface InitializationRecord {
   readonly seed: string;
@@ -176,8 +183,7 @@ const defaults: MatchRules = {
   capacityGain: 1, rangeGain: 1, speedGain: 0.5,
   maxBombCapacity: 4, maxBlastRange: 6, maxSpeed: 5,
 };
-const versions = { match: 'items-v1', map: 'fixed-map-v1', generator: 'none', ai: 'none' };
-const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
+const versions = { match: 'escape-ai-v1', map: 'fixed-map-v1', generator: 'none', ai: 'escape-ai-v1' };
 
 export function createMatch(config: MatchConfig): Match {
   validateConfig(config);
@@ -193,6 +199,10 @@ export function createMatch(config: MatchConfig): Match {
   if (!Object.hasOwn(config.rules ?? {}, 'maxBlastRange')) rules.maxBlastRange = Math.max(defaults.maxBlastRange, rules.blastRange);
   if (!Object.hasOwn(config.rules ?? {}, 'maxSpeed')) rules.maxSpeed = Math.max(defaults.maxSpeed, rules.speed);
   validateRules(rules);
+  const actorConfigs: ActorConfig[] = config.actors.map(actor => ({ id: actor.id, type: actor.type, spawnId: actor.spawnId,
+    ...(actor.ai === undefined ? {} : { ai: resolveAiConfig(actor.ai, rules.tickRate) }) }));
+  const controllers = new Map<string, ReturnType<typeof createEscapeController>>();
+  for (const actor of actorConfigs) if (actor.ai) controllers.set(actor.id, createEscapeController({ ...aiDefaults, ...actor.ai }));
   const map: SemanticMap = {
     width: config.map.width,
     height: config.map.height,
@@ -204,7 +214,7 @@ export function createMatch(config: MatchConfig): Match {
     seed: config.seed,
     rules,
     map,
-    actors: config.actors.map(actor => ({ id: actor.id, type: actor.type, spawnId: actor.spawnId })),
+    actors: actorConfigs,
     ...(config.playerId === undefined ? {} : { playerId: config.playerId }),
     versions,
   });
@@ -226,12 +236,18 @@ export function createMatch(config: MatchConfig): Match {
     const spawn = map.spawns.find(spawn => spawn.id === actor.spawnId)!;
     const position = { x: spawn.x + 0.5, y: spawn.y + 0.5 };
     return { id: actor.id, type: 'actor', position, previousPosition: position, heading: null, alive: true,
+      ...(controllers.has(actor.id) ? { ai: controllers.get(actor.id)!.readState(true) } : {}),
       abilities: { bombCapacity: rules.bombCapacity, blastRange: rules.blastRange, speed: rules.speed } };
   });
+  const readWorld = (): WorldState => freeze({ tick, initialization, initialMap: map, blockers, actors, bombs, hazards, items, result });
   return {
     advanceTick(intents = []) {
       if (result) return freeze([]);
       validateIntents(intents, actors);
+      if (controllers.size) {
+        const world = readWorld();
+        intents = [...intents, ...actors.filter(actor => actor.alive && controllers.has(actor.id)).map(actor => controllers.get(actor.id)!.advance(world, actor))];
+      }
       // A cleared cell becomes collectible on the next step, after all tick-start fire is gone.
       items = items.map(item => item.active || hazards.some(hazard => hazard.cells.some(cell => cell.x === item.x && cell.y === item.y))
         ? item : { ...item, active: true });
@@ -261,7 +277,7 @@ export function createMatch(config: MatchConfig): Match {
         events.push({ type: 'bomb-placed', tick: tick + 1, order: events.length, bombId: id, actorId: actor.id, cell });
       }
       // Fire active at tick start can ignite a bomb even if it expires at this step's end.
-      const burning = new Set(bombs.filter(bomb => hazards.some(hazard => hazard.cells.some(cell => cell.x === bomb.x && cell.y === bomb.y))).map(bomb => bomb.id));
+      const tickStartFire = hazards;
       actors = actors.map(actor => {
         if (!actor.alive) return { ...actor, previousPosition: actor.position };
         const intent = intents.find(intent => intent.actorId === actor.id);
@@ -281,30 +297,7 @@ export function createMatch(config: MatchConfig): Match {
       });
       tick += 1;
       hazards = hazards.filter(hazard => hazard.expiresAtTick > tick);
-      const scheduled = new Set(bombs.filter(bomb => bomb.detonateAtTick <= tick || burning.has(bomb.id)).map(bomb => bomb.id));
-      const exploded = new Map<string, Position[]>();
-      const destroyed = new Set<string>();
-      while (scheduled.size > 0) {
-        const bombId = [...scheduled].sort()[0]!;
-        scheduled.delete(bombId);
-        if (exploded.has(bombId)) continue;
-        const bomb = bombs.find(bomb => bomb.id === bombId)!;
-        const cells: Position[] = [{ x: bomb.x, y: bomb.y }];
-        for (const vector of Object.values(vectors)) {
-          for (let distance = 1; distance <= bomb.blastRange; distance++) {
-            const cell = { x: bomb.x + vector.x * distance, y: bomb.y + vector.y * distance };
-            if (cell.x < 0 || cell.x >= map.width || cell.y < 0 || cell.y >= map.height) break;
-            const wall = blockers.find(wall => wall.x === cell.x && wall.y === cell.y);
-            if (wall?.type === 'solid-wall') break;
-            cells.push(cell);
-            if (wall) { destroyed.add(wall.id); break; }
-          }
-        }
-        exploded.set(bomb.id, cells);
-        for (const other of bombs) {
-          if (!exploded.has(other.id) && cells.some(cell => cell.x === other.x && cell.y === other.y)) scheduled.add(other.id);
-        }
-      }
+      const { exploded, destroyed } = calculateExplosions(tick, map, blockers, bombs, tickStartFire);
       for (const [bombId, cells] of [...exploded].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) {
         let id: string;
         do { id = `fire-${++fireSequence}`; } while (entityIds.has(id));
@@ -369,102 +362,11 @@ export function createMatch(config: MatchConfig): Match {
           events.push({ type: 'match-ended', tick, order: events.length, result });
         }
       }
+      actors = actors.map(actor => controllers.has(actor.id) ? { ...actor, ai: controllers.get(actor.id)!.readState(actor.alive) } : actor);
       return freeze(events);
     },
-    readWorld() { return freeze({ tick, initialization, initialMap: map, blockers, actors, bombs, hazards, items, result }); },
+    readWorld,
   };
-}
-
-type CollisionMap = Pick<SemanticMap, 'width' | 'height'> & { readonly blockers: readonly Position[] };
-
-function overlapsCell(position: Position, cell: Position, radius: number): boolean {
-  return position.x + radius > cell.x && position.x - radius < cell.x + 1
-    && position.y + radius > cell.y && position.y - radius < cell.y + 1;
-}
-
-function pathTouchesCell(path: readonly Position[], cell: Position, radius: number): boolean {
-  for (let index = 1; index < path.length; index++) {
-    const start = path[index - 1]!;
-    const end = path[index]!;
-    if (Math.max(start.x, end.x) + radius > cell.x && Math.min(start.x, end.x) - radius < cell.x + 1
-      && Math.max(start.y, end.y) + radius > cell.y && Math.min(start.y, end.y) - radius < cell.y + 1) return true;
-  }
-  return path.length === 1 && overlapsCell(path[0]!, cell, radius);
-}
-
-function moveAxis(position: Position, direction: Direction, distance: number, map: CollisionMap, radius: number): Position {
-  const vector = vectors[direction];
-  const axis = vector.x === 0 ? 'y' : 'x';
-  const across = axis === 'x' ? 'y' : 'x';
-  const sign = vector[axis];
-  const start = position[axis];
-  let end = Math.max(0.5, Math.min((axis === 'x' ? map.width : map.height) - 0.5, start + sign * distance));
-  for (const wall of map.blockers) {
-    if (position[across] + radius <= wall[across] || position[across] - radius >= wall[across] + 1) continue;
-    // Stop at the preceding cell center. A newly blocking bomb may find an
-    // actor already past that center; block re-entry without pushing it back.
-    if (sign > 0 && start <= wall[axis] - radius) end = Math.min(end, Math.max(start, wall[axis] - 0.5));
-    if (sign < 0 && start >= wall[axis] + 1 + radius) end = Math.max(end, Math.min(start, wall[axis] + 1.5));
-  }
-  return { ...position, [axis]: end };
-}
-
-function freeze<T>(value: T): T {
-  if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
-    for (const child of Object.values(value)) freeze(child);
-    Object.freeze(value);
-  }
-  return value;
-}
-
-interface MovementOutcome { position: Position; heading: Direction | null; path: readonly Position[] }
-
-function moveActor(actor: ActorState, wanted: Direction, rules: MovementRules, map: CollisionMap): MovementOutcome {
-  const distance = rules.speed / rules.tickRate;
-  const alignmentAxis = vectors[wanted].x === 0 ? 'x' : 'y';
-  if (actor.heading && vectors[actor.heading][alignmentAxis] === 0) {
-    const position = moveAxis(actor.position, wanted, distance, map, rules.radius);
-    return { position, heading: wanted, path: [actor.position, position] };
-  }
-  const nearest = Math.floor(actor.position[alignmentAxis]) + 0.5;
-  const snapDistance = Math.abs(nearest - actor.position[alignmentAxis]);
-  const snapped = { ...actor.position, [alignmentAxis]: nearest };
-  const snapDirection = alignmentAxis === 'x' ? (nearest >= actor.position.x ? 'right' : 'left') : (nearest >= actor.position.y ? 'down' : 'up');
-  const snapEnd = moveAxis(actor.position, snapDirection, snapDistance, map, rules.radius);
-  if (snapDistance <= rules.turnTolerance + 1e-10 && Math.abs(snapEnd[alignmentAxis] - nearest) <= 1e-10 && (!actor.heading || canTurn(snapped, wanted, map, rules.radius))) {
-    const position = moveAxis(snapped, wanted, distance, map, rules.radius);
-    return { position, heading: wanted, path: [actor.position, snapped, position] };
-  }
-  // Releasing between centers loses the heading. Walk to the nearest open
-  // intersection before a perpendicular restart instead of leaving the rail.
-  const heading = actor.heading ?? (canTurn(snapped, wanted, map, rules.radius) ? snapDirection : null);
-  const sign = heading ? vectors[heading][alignmentAxis] : 0;
-  let center = sign < 0 ? Math.floor(actor.position[alignmentAxis] - 0.5 + 1e-10) + 0.5 : Math.ceil(actor.position[alignmentAxis] - 0.5 - 1e-10) + 0.5;
-  const limit = alignmentAxis === 'x' ? map.width : map.height;
-  while (center > 0 && center < limit) {
-    const travel = Math.abs(center - actor.position[alignmentAxis]);
-    if (travel > distance + 1e-10 || (!heading && travel > 1e-10)) break;
-    const aligned = { ...actor.position, [alignmentAxis]: center };
-    const reached = heading ? moveAxis(actor.position, heading, travel, map, rules.radius) : actor.position;
-    if (Math.abs(reached[alignmentAxis] - center) > 1e-10) break;
-    if (canTurn(aligned, wanted, map, rules.radius)) {
-      const position = moveAxis(aligned, wanted, Math.max(0, distance - travel), map, rules.radius);
-      return { position, heading: wanted, path: [actor.position, aligned, position] };
-    }
-    if (!heading) break;
-    center += sign;
-  }
-  const position = heading ? moveAxis(actor.position, heading, distance, map, rules.radius) : actor.position;
-  return { position, heading, path: [actor.position, position] };
-}
-
-function canTurn(position: Position, direction: Direction, map: CollisionMap, radius: number): boolean {
-  const vector = vectors[direction];
-  const x = Math.floor(position.x) + vector.x;
-  const y = Math.floor(position.y) + vector.y;
-  return x >= 0 && x < map.width && y >= 0 && y < map.height
-    && !map.blockers.some(wall => wall.x === x && wall.y === y)
-    && !map.blockers.some(wall => position.x + radius > wall.x && position.x - radius < wall.x + 1 && position.y + radius > wall.y && position.y - radius < wall.y + 1);
 }
 
 export type MatchErrorCode = 'invalid-config' | 'unknown-entity-type' | 'invalid-map' | 'invalid-intent';
@@ -493,6 +395,9 @@ function validateConfig(config: unknown): void {
       throw new MatchError('invalid-config', 'Actors require unique identities, entity types, and spawn references');
     }
     actorIds.add(actor.id);
+    if (Object.hasOwn(actor, 'ai') && (!isRecord(actor.ai) || Object.keys(actor.ai).some(key => !Object.hasOwn(aiDefaults, key)))) {
+      throw new MatchError('invalid-config', 'AI must specify supported escape settings');
+    }
   }
   if (Object.hasOwn(config, 'playerId') && (!nonempty(config.playerId) || !actorIds.has(config.playerId))) {
     throw new MatchError('invalid-config', 'playerId must identify a configured actor');
@@ -500,6 +405,15 @@ function validateConfig(config: unknown): void {
   if (config.rules !== undefined && (!isRecord(config.rules) || Object.keys(config.rules).some(key => !Object.hasOwn(defaults, key)))) {
     throw new MatchError('invalid-config', 'Match rules must contain supported rule keys');
   }
+}
+function resolveAiConfig(config: Partial<EscapeAiConfig>, tickRate: number): EscapeAiConfig {
+  const resolved = { ...aiDefaults, ...config };
+  for (const key of ['reactionSeconds', 'decisionIntervalSeconds', 'searchHorizonSeconds'] as const) {
+    if (!Number.isFinite(resolved[key]) || (key === 'reactionSeconds' ? resolved[key] < 0 : resolved[key] <= 0)
+      || !Number.isSafeInteger(Math.ceil(resolved[key] * tickRate))) throw new MatchError('invalid-config', `${key} must resolve to a valid AI tick duration`);
+  }
+  if (!Number.isSafeInteger(resolved.maxSearchStates) || resolved.maxSearchStates <= 0) throw new MatchError('invalid-config', 'maxSearchStates must be a positive safe integer');
+  return resolved;
 }
 function validateRules(rules: MatchRules): void {
   if (!Number.isFinite(rules.itemDropChance) || rules.itemDropChance < 0 || rules.itemDropChance > 1) throw new MatchError('invalid-config', 'itemDropChance must be between 0 and 1');
@@ -561,9 +475,10 @@ function validateIntents(intents: unknown, actors: readonly ActorState[]): void 
   const seen = new Set<string>();
   for (const intent of intents) {
     if (!isRecord(intent) || typeof intent.actorId !== 'string' || !actors.some(actor => actor.id === intent.actorId)
+      || actors.some(actor => actor.id === intent.actorId && actor.ai !== undefined)
       || seen.has(intent.actorId) || (Object.hasOwn(intent, 'bomb') && typeof intent.bomb !== 'boolean')
       || (intent.move !== null && (typeof intent.move !== 'string' || !Object.hasOwn(vectors, intent.move)))) {
-      throw new MatchError('invalid-intent', 'Each known actor may submit one cardinal move or explicit null release per tick');
+      throw new MatchError('invalid-intent', 'Each externally controlled actor may submit one cardinal move or explicit null release per tick');
     }
     seen.add(intent.actorId);
   }

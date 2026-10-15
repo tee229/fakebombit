@@ -21,6 +21,7 @@
     "demo:bombs": "tsx src/demo/bombs.ts",
     "demo:chains": "tsx src/demo/chain-reactions.ts",
     "demo:items": "tsx src/demo/items.ts",
+    "demo:escape": "tsx src/demo/escape.ts",
     "check:architecture": "tsx scripts/check-architecture.ts",
     "check": "pnpm typecheck && pnpm typecheck:core && pnpm typecheck:browser && pnpm test && pnpm check:architecture && pnpm build"
   },

@@ -1,12 +1,14 @@
 # Fake Bomb It
 
-Issues #3–#8 implement a headless movement, bomb and power-up prototype on fixed semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
+Issues #3–#9 implement headless movement, bombs, power-ups and a danger-aware escape AI on fixed semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run
 
-Run `pnpm dev` and open <http://127.0.0.1:5173/> to play the fixed-map touch and keyboard training arena. In landscape, use the left four-way joystick and right bomb button; multiple pointers can move and bomb together. Use **WASD / arrow keys**, **Space**, and **R**, or the canvas retry button. **P / Escape** toggles pause; **Enter** or the canvas continue button resumes manually. Leaving the page pauses the match and clears input; returning does not resume it automatically. The three numbered opponents are stationary training targets; AI and the full menu flow belong to later tickets. The canvas shows current walls, breakable blockers, actors, bombs, active fire, event history, countdown, and result without a theme or image pack. The #7 device-validation record is in [touch and pause validation](docs/validation/issue-7-touch-and-pause.md).
+Run `pnpm dev` and open <http://127.0.0.1:5173/> to play the fixed-map touch and keyboard training arena. In landscape, use the left four-way joystick and right bomb button; multiple pointers can move and bomb together. Use **WASD / arrow keys**, **Space**, and **R**, or the canvas retry button. **P / Escape** toggles pause; **Enter** or the canvas continue button resumes manually. Leaving the page pauses the match and clears input; returning does not resume it automatically. One opponent is an escape AI, marked **AI**, and two are stationary targets. Attack/item-seeking AI and the full menu flow belong to later tickets. The canvas shows current walls, breakable blockers, actors, bombs, active fire, items, abilities, event history, countdown, and result without a theme or image pack. The #7 device-validation record is in [touch and pause validation](docs/validation/issue-7-touch-and-pause.md).
 
 Open <http://127.0.0.1:5173/?arena=items> for the power-up practice arena. Move up, then right to collect range, capacity and speed. Its three drops come from real explosions using the normal 50% chance and a fixed seed; a 211-tick preparation clears the fire before controls start. Retry repeats that preparation. The HUD shows live abilities, and distinct symbols/labels identify the three kinds. Bombing two different cells demonstrates capacity; longer fire rays and faster movement show the other gains. The ordinary arena also drops items when crates are destroyed. See [item rules and validation](docs/validation/issue-8-items.md).
+
+Open <http://127.0.0.1:5173/?arena=escape> to watch one AI escape a repeatable chain. Bombs nominally due at ticks 180 and 195 both explode at 180; the AI moves out of their rays and survives the lasting fire. **R** repeats the same preparation and scene. The HUD shows observing, escaping, safe, unconfirmed-route or budget status, and the AI has a distinct ring and label. See [escape AI validation](docs/validation/issue-9-escape-ai.md).
 
 The browser uses Vite **8.3.4** and Phaser **3.90.0**, verified against the npm registry and official documentation during implementation. Phaser 3 supplies Canvas/WebGL rendering and the documented scene/scale interfaces; the registry's current Phaser 4 release was also checked. `pnpm build` writes the production browser build to `dist/web`; `pnpm preview` serves it on <http://127.0.0.1:4173/>. Headless output remains in `dist/match` and `dist/demo`.
 
@@ -19,10 +21,12 @@ pnpm demo
 pnpm demo:bombs
 pnpm demo:chains
 pnpm demo:items
+pnpm demo:escape
 node dist/demo/movement.js
 node dist/demo/bombs.js
 node dist/demo/chain-reactions.js
 node dist/demo/items.js
+node dist/demo/escape.js
 ```
 
 `pnpm check` runs all three TypeScript checks, behavioral tests, the architecture guard, and both builds. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required for those demos or rule tests.
@@ -66,7 +70,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor configuration, copied initial map, and implementation identifiers: `items-v1`, `fixed-map-v1`, generator `none`, AI `none`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Earlier implementations, including `center-line-movement-v1`, are rejected because item drops, pickup and actor abilities change outcomes. The seed initializes separate placement, drop and pickup streams. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor and AI configuration, copied initial map, and implementation identifiers: match `escape-ai-v1`, map `fixed-map-v1`, generator `none`, AI `escape-ai-v1`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Earlier implementations, including `items-v1`, are rejected because internal AI intent generation changes outcomes. The seed initializes separate placement, drop and pickup streams. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -127,6 +131,25 @@ Each destroyed breakable blocker consumes a 32-bit probability draw, in row-majo
 
 Pickup occurs after damage and before the match result. Only living actors whose final cell contains an active item participate; crossing a cell without ending there does not collect it. Contenders sort by actor ID and use a dedicated pickup stream; one valid actor needs no draw. Each instance is consumed once. Movement and placement use pre-pickup abilities, so increases take effect on the next step. `pnpm demo:items` demonstrates actual capacity, blast and travel differences through the public match operations, with initialization replay checks.
 
+## Danger forecast and escape AI
+
+Set `ai: {}` on an actor configuration to use the escape controller. AI configuration is copied, resolved and frozen in initialization, while `ActorState.ai` exposes frozen status, last decision tick, searched-state count and remaining plan steps. External intents for controlled actors fail atomically with `invalid-intent`; internal AI intents enter the same placement/movement/settlement pipeline. The AI currently emits only movement and release, never a bomb action.
+
+| AI setting | Default | Validation |
+| --- | --- | --- |
+| `reactionSeconds` | 0.2 | Finite, nonnegative, safely representable in ticks |
+| `decisionIntervalSeconds` | 0.1 | Positive finite duration resolving to safe ticks |
+| `maxSearchStates` | 6000 | Positive safe integer |
+| `searchHorizonSeconds` | 6 | Positive finite duration resolving to safe ticks |
+
+Durations round up to logical ticks. Each step observes only tick-start bombs, hazards, blockers and the actor's current abilities. Changed facts discard the old plan and start the reaction delay; planning waits for both that delay and the decision cadence. Subsequent planned directions use ordinary per-step input. There is no future player input, future random-drop knowledge, navigation teleport or speed override. Direction tie-breaking is deterministic (up, right, down, left, wait); no AI randomness is currently needed or consumed.
+
+The internal, user-approved query seam `forecastDanger(world)` in `src/match/forecast.ts` accepts a match snapshot and returns frozen explosion cells/deadlines, exclusive danger windows and temporary blocker/bomb changes. It jumps between known explosion events rather than iterating through idle ticks. `calculateExplosions` is shared with real stepping, including phase-start blockers, chains, destruction and bomb-specific range. Current fire keeps its original interval. Queries never alter the match or consume gameplay streams. A terminal match has no future projection. Before termination, the physical projection assumes the rule clock keeps advancing and no unknown new actions occur; it does not speculate about future result arbitration or pickups.
+
+The bounded route search works in time and continuous position, using shared real movement and collision geometry. Each candidate step checks swept contact with tick-start fire, endpoint contact with new explosions, future cleared walls, current speed and branch-specific bomb leave permissions. A goal must permit waiting through **all** forecast danger windows, including windows beyond the route-search horizon. Waiting is a real action, so a route can cross a corridor after fire has expired. Previously lost bomb leave permission cannot be regained. Float-rounded search keys only merge search alternatives; candidate positions themselves use exact movement results.
+
+If the search cannot confirm a route within its horizon or state budget, the AI stops and does not bomb; later decisions retry. `no-route` means no route was confirmed within these bounds, not a proof that escape is always impossible. Unknown new actions can invalidate a plan, and finite reaction delay can prevent survival. This ticket does not implement attack, item-seeking, random wandering or difficulty modes. `pnpm demo:escape` checks a real staggered chain, survival and 220 steps of identical replay.
+
 ## Architecture guard
 
 `scripts/check-architecture.ts` uses the TypeScript AST, checks all core `.ts` files, and resolves imports/re-exports/dynamic imports. Only dependencies on checked TypeScript files inside `src/match` are permitted; package imports, outside-core dependencies, unchecked files, and symlinks fail. It rejects known host globals, clock access (including `Date`, `performance`, and implicit `Intl` time), `Math.random`, common aliases/computed access that can hide randomness, runtime code generation, and visual/audio filename references. Deterministic direct math is allowed, and comments are ignored. CLI fixtures verify rejection and acceptance rather than testing internal checker helpers.
@@ -151,4 +174,4 @@ For rendering-frequency checks, open `/?fps=30`, `/?fps=60`, or `/?fps=120`. The
 
 For #6, the user confirmed keyboard-intent and game-session frame seams with review baseline `b1986ee`. For #7, the user confirmed touch-input intents and game-session step/pause/resume seams with review baseline `6a0b3e1`. Game-flow tests use real input and real matches rather than internal mocks. Core movement/bomb/chain checks remain unchanged.
 
-AI, generated maps, themes/skins, and the full game flow remain later tickets. The user completed #7's initial physical touch checks on Android + Edge: simultaneous movement/bombing, interruption during held input, manual resume without unintended actions, and dragging/turning without obvious mis-taps. Device-wide performance, browser coverage and final feel tuning remain #16's scope.
+Attack/item-seeking AI, generated maps, themes/skins, and the full game flow remain later tickets. The user completed #7's initial physical touch checks on Android + Edge: simultaneous movement/bombing, interruption during held input, manual resume without unintended actions, and dragging/turning without obvious mis-taps. Device-wide performance, browser coverage and final feel tuning remain #16's scope.

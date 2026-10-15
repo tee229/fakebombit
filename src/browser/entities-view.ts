@@ -15,6 +15,7 @@ const itemDisplay = {
   'item.range': { label: '距离', color: 0xffaf8c, ink: '#ffaf8c', ability: 'blastRange' },
   'item.speed': { label: '速度', color: 0x83dfb6, ink: '#83dfb6', ability: 'speed' },
 } as const;
+const aiLabels = { observing: '观察中', safe: '安全', escaping: '逃生中', 'no-route': '未找到安全路', 'budget-exhausted': '搜索预算不足', eliminated: '已淘汰' } as const;
 
 /** The view reads gameplay facts; drawing and event history never alter the match. */
 export class EntitiesView {
@@ -31,25 +32,27 @@ export class EntitiesView {
   private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
 
-  constructor(private readonly scene: Phaser.Scene, world: WorldState, itemTraining = false) {
+  constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly arena: 'training' | 'items' | 'escape' = 'training') {
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
     this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
-    this.text(24, 63, itemTraining ? '道具练习场 · 横屏游玩' : '实体训练场 · 横屏游玩', 20, '#b8d1c6');
+    const arenaTitles = { training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
+    this.text(24, 63, `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
     this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
     this.abilitiesLabel = this.text(350, 58, '', 18, '#b8d1c6');
     this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
-    this.history = this.text(24, 150, itemTraining ? '上行，再右移\n依次拾取上方道具' : '炸开障碍后\n等火焰消失再拾取', 16, '#b8d1c6');
+    const arenaHelp = { training: '炸开障碍后\n等火焰消失再拾取', items: '上行，再右移\n依次拾取上方道具', escape: '观察 AI 躲开连锁\nR 可重放同一场景' };
+    this.history = this.text(24, 150, arenaHelp[this.arena], 16, '#b8d1c6');
     for (const [index, display] of Object.values(itemDisplay).entries()) this.text(52, 210 + index * 23, display.label, 16, display.ink);
     this.text(24, 538, 'WASD / 方向键', 18, '#b8d1c6');
     const legend = [['固定墙', '#79958c'], ['可破坏障碍', '#f1ca7c'], ['炸弹', '#eaf3ed'], ['有效火焰', '#ffaf8c']] as const;
     for (const [index, [label, color]] of legend.entries()) this.text(274 + index * 135, 543, label, 16, color);
 
     world.actors.forEach((actor, index) => {
-      const label = actor.id === world.initialization.playerId ? 'P' : String(index).padStart(2, '0');
+      const label = actor.id === world.initialization.playerId ? 'P' : actor.ai ? 'AI' : String(index).padStart(2, '0');
       const text = this.text(0, 0, label, 18, '#102b2c', '700').setOrigin(0.5);
       this.actorLabels.set(actor.id, text);
     });
@@ -127,6 +130,7 @@ export class EntitiesView {
       g.fillStyle(player ? colors.player : colors.gold);
       if (player) g.fillPoints([{ x, y: y - 22 }, { x: x + 22, y }, { x, y: y + 22 }, { x: x - 22, y }], true);
       else g.fillCircle(x, y, 20);
+      if (actor.ai) g.lineStyle(2, colors.player).strokeCircle(x, y, 23);
       label.setPosition(x, y);
     }
     // The legend uses the same geometric grammar, never texture-derived gameplay facts.
@@ -137,7 +141,8 @@ export class EntitiesView {
     g.lineStyle(2, 0xffdec5).lineBetween(657, 551, 667, 551).lineBetween(662, 546, 662, 556);
     for (const [index, kind] of (['item.capacity', 'item.range', 'item.speed'] as const).entries()) this.drawItem(kind, 34, 219 + index * 23);
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
-    this.progress.setText(`目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
+    const ai = opponents.find(actor => actor.ai)?.ai;
+    this.progress.setText(ai && this.arena === 'escape' ? `AI：${aiLabels[ai.status]}` : `目标剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
     const player = world.actors.find(actor => actor.id === world.initialization.playerId);
     if (player) this.abilitiesLabel.setText(`炸弹 ${world.bombs.filter(bomb => bomb.ownerId === player.id).length}/${player.abilities.bombCapacity} · 距离 ${player.abilities.blastRange} · 速度 ${Number(player.abilities.speed.toFixed(2))}`);
     const remaining = Math.max(0, Math.ceil(world.initialization.rules.matchDurationSeconds - world.tick / world.initialization.rules.tickRate));
