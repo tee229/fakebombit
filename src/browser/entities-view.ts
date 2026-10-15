@@ -73,8 +73,8 @@ export class EntitiesView {
     this.root.add(this.result);
     const shade = scene.add.rectangle(512, 310, 510, 205, colors.background, 0.97).setStrokeStyle(2, colors.player);
     this.resultTitle = scene.add.text(512, 270, '', { fontFamily: font, fontSize: '34px', fontStyle: 'bold', color: '#eaf3ed' }).setOrigin(0.5);
-    const retry = scene.add.text(512, 343, '点击右侧重试 / 按 R', { fontFamily: font, fontSize: '22px', color: '#83dfb6' }).setOrigin(0.5);
-    this.result.add([shade, this.resultTitle, retry]);
+    const actions = scene.add.text(512, 346, '重试本局：R / 右侧「重试」\n新开一局：N / 右侧「新开一局」', { fontFamily: font, fontSize: '22px', color: '#83dfb6', align: 'center', lineSpacing: 10 }).setOrigin(0.5);
+    this.result.add([shade, this.resultTitle, actions]);
     this.present(world, 0, []);
   }
 

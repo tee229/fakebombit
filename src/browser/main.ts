@@ -184,7 +184,7 @@ class TrainingScene extends Phaser.Scene {
     if (result && result !== this.lastResult) {
       this.lastResult = result;
       const status = document.getElementById('game-status');
-      if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局。`;
+      if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局，按 N 新开一局，也可点击右侧对应按钮。`;
     }
   }
 }
