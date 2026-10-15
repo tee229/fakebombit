@@ -1,10 +1,10 @@
 # Fake Bomb It
 
-Issues #3–#9 implement headless movement, bombs, power-ups and a danger-aware escape AI on fixed semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
+Issues #3–#10 implement headless movement, bombs, power-ups, a danger-aware escape AI and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run
 
-Run `pnpm dev` and open <http://127.0.0.1:5173/> to play the fixed-map touch and keyboard training arena. In landscape, use the left four-way joystick and right bomb button; multiple pointers can move and bomb together. Use **WASD / arrow keys**, **Space**, and **R**, or the canvas retry button. **P / Escape** toggles pause; **Enter** or the canvas continue button resumes manually. Leaving the page pauses the match and clears input; returning does not resume it automatically. One opponent is an escape AI, marked **AI**, and two are stationary targets. Attack/item-seeking AI and the full menu flow belong to later tickets. The canvas shows current walls, breakable blockers, actors, bombs, active fire, items, abilities, event history, countdown, and result without a theme or image pack. The #7 device-validation record is in [touch and pause validation](docs/validation/issue-7-touch-and-pause.md).
+Run `pnpm dev` and open <http://127.0.0.1:5173/> to play a validated 17×15 seeded arena. The size references the original Bomb It screenshot, as an estimate including this project's border. In landscape, use the left four-way joystick and right bomb button; multiple pointers can move and bomb together. Use **WASD / arrow keys**, **Space**, and **R**, or the canvas retry button. **R / 重试** recreates the same initialization; **N / 新开一局** chooses a different seed. The seed is displayed on the right and stored in `?seed=...` for sharing or replay. **P / Escape** toggles pause; **Enter** or the canvas continue button resumes manually. Leaving the page pauses the match and clears input; returning does not resume it automatically. One opponent is an escape AI, marked **AI**, and two are stationary targets. Attack/item-seeking AI and the full menu flow belong to later tickets. `?arena=training` retains the original fixed arena. See [map generation rules and validation](docs/validation/issue-10-map-generation.md) and [touch and pause validation](docs/validation/issue-7-touch-and-pause.md).
 
 Open <http://127.0.0.1:5173/?arena=items> for the power-up practice arena. Move up, then right to collect range, capacity and speed. Its three drops come from real explosions using the normal 50% chance and a fixed seed; a 211-tick preparation clears the fire before controls start. Retry repeats that preparation. The HUD shows live abilities, and distinct symbols/labels identify the three kinds. Bombing two different cells demonstrates capacity; longer fire rays and faster movement show the other gains. The ordinary arena also drops items when crates are destroyed. See [item rules and validation](docs/validation/issue-8-items.md).
 
@@ -40,6 +40,7 @@ const match = createMatch({ seed, map, actors, rules, playerId: 'player' });
 const events = match.advanceTick([{ actorId: 'player', move: 'right', bomb: true }]);
 const world = match.readWorld();
 const retry = createMatch(world.initialization);
+const generated = createMatch({ seed, generator: {}, actors, playerId: 'player' });
 ```
 
 These are the three public operations: create a match, advance exactly one logical tick, and read its world. Callers submit cardinal gameplay intents (`up`, `right`, `down`, `left`) or `null` to release movement, with optional `bomb: true` for a one-step action. They never coordinate internal rule updates. Rules and initialization are frozen for each match. Specify `playerId` to enable victory, defeat, timeout, and terminal freeze; it must identify a configured actor and is recorded for retries. Omitting it retains the rules sandbox used by the movement demo, with no match result or timeout.
@@ -70,7 +71,9 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 
 ## Reproduction and failures
 
-`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor and AI configuration, copied initial map, and implementation identifiers: match `escape-ai-v1`, map `fixed-map-v1`, generator `none`, AI `escape-ai-v1`. Creating from that record and submitting the same tick-indexed intent sequence reproduces the world. Earlier implementations, including `items-v1`, are rejected because internal AI intent generation changes outcomes. The seed initializes separate placement, drop and pickup streams. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+`world.initialization` stores the seed, fully resolved rules (including tick frequency), actor and AI configuration, copied initial map, and implementation identifiers: match `generated-map-v1`, map `semantic-map-v1`, generator `symmetric-map-v1`, AI `escape-ai-v1`. Generated maps also record resolved generator settings, every attempted candidate's outcome, fallback source, and spawn safety proofs. Creating from that record regenerates and verifies those facts; submitting the same tick-indexed intent sequence reproduces the world. Earlier implementations, including `escape-ai-v1`, are rejected. The seed initializes separate map generation, placement, drop and pickup streams. Seed alone does not promise reproduction across changed maps, rules, implementations, or runtime environments.
+
+Use `generator: {}` instead of `map` to request generation. Generated spawn IDs are `player`, `target-1`, `target-2`, `target-3`; actors reference these markers. Defaults are width 17, height 15, `blockerChance: 0.45`, `maxAttempts: 12`, `maxSearchStates: 6000`, `searchHorizonSeconds: 6`. Width/height must be odd integers from 7 through 25. Attempts may be zero; search limits must be positive. Reflection symmetry, starting space, nearby resources, connectivity without crates and initial bomb escape are checked before acceptance. Exhausting candidates validates a resource-bearing base layout under the same rules; failure there throws a `MapGenerationError` with bounded attempt diagnostics. Successful initial escape does not prevent later self-trapping.
 
 `createMatch` throws `MatchError` with a machine-readable `code` and explanation:
 
@@ -80,6 +83,7 @@ A turn within `turnTolerance` of the nearest center may snap to that center at t
 | `unknown-entity-type` | Unsupported blocker or actor type |
 | `invalid-map` | Malformed map, invalid cells, conflicting blockers/markers, or missing/blocked spawn |
 | `invalid-intent` | Invalid intent, unknown actor ID, or multiple intents for one actor in a tick |
+| `generation-failed` | All configured random candidates and the validated base layout failed; inspect error `attempts` for reasons |
 
 Creation validation reports its first failure. Invalid tick intents reject the whole tick before changing state. A tick accepts at most one intent per actor; ordering independent actors' intents does not affect movement.
 

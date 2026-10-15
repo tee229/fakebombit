@@ -1,9 +1,19 @@
-import type { ActorState, Direction, WorldState } from './index.js';
+import type { ActorState, Direction, InitializationRecord, Position, SemanticMap, WorldState } from './index.js';
 import type { DangerForecast } from './forecast.js';
-import { moveActor, overlapsCell, pathTouchesCell } from './motion.js';
+import { moveActor, moveAxis, overlapsCell, pathTouchesCell, vectors } from './motion.js';
+
+export type QueryWorld = Pick<WorldState, 'tick' | 'initialMap' | 'blockers' | 'bombs' | 'hazards' | 'result'>
+  & { readonly initialization: Pick<InitializationRecord, 'rules'> };
+
+export function adjacentPassage(map: SemanticMap, cell: Position, direction: Direction, radius: number): Position | null {
+  const vector = vectors[direction];
+  const target = { x: cell.x + vector.x, y: cell.y + vector.y };
+  const moved = moveAxis({ x: cell.x + 0.5, y: cell.y + 0.5 }, direction, 1, map, radius);
+  return moved.x === target.x + 0.5 && moved.y === target.y + 0.5 ? target : null;
+}
 
 /** Passage, movement and damage for one candidate step, using the authoritative motion rules. */
-export function projectStep(world: WorldState, forecast: DangerForecast, actor: ActorState, direction: Direction | null,
+export function projectStep(world: QueryWorld, forecast: DangerForecast, actor: ActorState, direction: Direction | null,
   tick: number, exitBombIds: readonly string[]) {
   const phase = forecast.changes.findLast(change => change.tick <= tick)!;
   const rules = world.initialization.rules;
@@ -17,7 +27,7 @@ export function projectStep(world: WorldState, forecast: DangerForecast, actor: 
     exitBombIds: exitBombIds.filter(id => phase.bombs.some(bomb => bomb.id === id && overlapsCell(moved.position, bomb, rules.radius))) };
 }
 
-export function safeToWait(world: WorldState, forecast: DangerForecast, actor: ActorState, tick: number): boolean {
+export function safeToWait(world: QueryWorld, forecast: DangerForecast, actor: ActorState, tick: number): boolean {
   return !forecast.windows.some(interval => interval.endTick > tick
     && interval.cells.some(cell => overlapsCell(actor.position, cell, world.initialization.rules.radius)));
 }

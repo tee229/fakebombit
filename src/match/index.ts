@@ -1,3 +1,9 @@
+import { makeBomb } from './bomb.js';
+import { MatchError } from './errors.js';
+import { generateMap, type GenerationRecord, type GeneratorConfig } from './generation.js';
+export { MatchError } from './errors.js';
+export type { MatchErrorCode } from './errors.js';
+export { MapGenerationError } from './generation.js';
 import { moveActor, overlapsCell, pathTouchesCell, vectors } from './motion.js';
 import { aiDefaults, createEscapeController, type EscapeAiConfig, type EscapeAiState } from './escape-ai.js';
 import { calculateExplosions } from './explosions.js';
@@ -52,6 +58,8 @@ export interface MatchConfig {
   readonly rules?: Partial<MatchRules>;
   readonly versions?: InitializationRecord['versions'];
 }
+export interface GeneratedMatchConfig extends Omit<MatchConfig, 'map'> { readonly generator: Partial<GeneratorConfig> }
+export type { GeneratorConfig };
 export interface GameplayIntent { readonly actorId: string; readonly move: Direction | null; readonly bomb?: boolean }
 export interface BombState extends Position {
   readonly id: string;
@@ -154,6 +162,7 @@ export interface ActorState {
   readonly ai?: EscapeAiState;
 }
 export interface InitializationRecord {
+  readonly generation?: GenerationRecord;
   readonly seed: string;
   readonly rules: MatchRules;
   readonly map: SemanticMap;
@@ -183,22 +192,28 @@ const defaults: MatchRules = {
   capacityGain: 1, rangeGain: 1, speedGain: 0.5,
   maxBombCapacity: 4, maxBlastRange: 6, maxSpeed: 5,
 };
-const versions = { match: 'escape-ai-v1', map: 'fixed-map-v1', generator: 'none', ai: 'escape-ai-v1' };
+const versions = { match: 'generated-map-v1', map: 'semantic-map-v1', generator: 'symmetric-map-v1', ai: 'escape-ai-v1' };
 
-export function createMatch(config: MatchConfig): Match {
-  validateConfig(config);
+export function createMatch(source: MatchConfig | GeneratedMatchConfig | InitializationRecord): Match {
+  validateConfig(source);
+  if ('generator' in source && 'map' in source) throw new MatchError('invalid-config', 'Choose either a fixed map or a generator');
+  const rules = resolveMatchRules(source.rules);
+  const record = 'generation' in source ? source.generation : undefined;
+  if (record !== undefined && (record === null || typeof record !== 'object' || !('config' in record))) throw new MatchError('invalid-config', 'Invalid generation record');
+  const generated = 'generator' in source ? generateMap(source.seed, source.generator, rules)
+    : record ? generateMap(source.seed, record.config, rules) : undefined;
+  const selectedMap = generated?.map ?? ('map' in source ? source.map : undefined);
+  if (!selectedMap) throw new MatchError('invalid-map', 'A map or generator is required');
+  if (record && (!sameRecord(record, generated?.generation) || !sameRecord('map' in source ? source.map : undefined, selectedMap))) {
+    throw new MatchError('invalid-config', 'Initialization record does not reproduce its generated map and validation');
+  }
+  const config: MatchConfig = { ...source, map: selectedMap };
   validateMap(config.map, config.actors);
   if (config.actors.some(actor => config.map.blockers.some(wall => wall.id === actor.id))) throw new MatchError('invalid-config', 'Actor and blocker entity identities must be distinct');
   for (const actor of config.actors) {
     if (actor.type !== 'actor') throw new MatchError('unknown-entity-type', `Unknown actor type: ${String(actor.type)}`);
   }
 
-  const rules = { ...defaults, ...config.rules };
-  // Existing high-speed/capacity scenarios retain their base capabilities when no cap was supplied.
-  if (!Object.hasOwn(config.rules ?? {}, 'maxBombCapacity')) rules.maxBombCapacity = Math.max(defaults.maxBombCapacity, rules.bombCapacity);
-  if (!Object.hasOwn(config.rules ?? {}, 'maxBlastRange')) rules.maxBlastRange = Math.max(defaults.maxBlastRange, rules.blastRange);
-  if (!Object.hasOwn(config.rules ?? {}, 'maxSpeed')) rules.maxSpeed = Math.max(defaults.maxSpeed, rules.speed);
-  validateRules(rules);
   const actorConfigs: ActorConfig[] = config.actors.map(actor => ({ id: actor.id, type: actor.type, spawnId: actor.spawnId,
     ...(actor.ai === undefined ? {} : { ai: resolveAiConfig(actor.ai, rules.tickRate) }) }));
   const controllers = new Map<string, ReturnType<typeof createEscapeController>>();
@@ -215,6 +230,7 @@ export function createMatch(config: MatchConfig): Match {
     rules,
     map,
     actors: actorConfigs,
+    ...(generated ? { generation: generated.generation } : {}),
     ...(config.playerId === undefined ? {} : { playerId: config.playerId }),
     versions,
   });
@@ -271,9 +287,7 @@ export function createMatch(config: MatchConfig): Match {
         do { id = `bomb-${++bombSequence}`; } while (entityIds.has(id));
         entityIds.add(id);
         const exitActorIds = actors.filter(other => other.alive && overlapsCell(other.position, cell, rules.radius)).map(other => other.id).sort();
-        bombs = [...bombs, { id, type: 'bomb', ownerId: actor.id, ...cell, exitActorIds,
-          blastRange: actor.abilities.blastRange,
-          placedAtTick: tick, detonateAtTick: tick + Math.ceil(rules.bombFuseSeconds * rules.tickRate) }];
+        bombs = [...bombs, makeBomb(id, actor, tick, rules, exitActorIds)];
         events.push({ type: 'bomb-placed', tick: tick + 1, order: events.length, bombId: id, actorId: actor.id, cell });
       }
       // Fire active at tick start can ignite a bomb even if it expires at this step's end.
@@ -369,12 +383,11 @@ export function createMatch(config: MatchConfig): Match {
   };
 }
 
-export type MatchErrorCode = 'invalid-config' | 'unknown-entity-type' | 'invalid-map' | 'invalid-intent';
-export class MatchError extends Error {
-  constructor(readonly code: MatchErrorCode, message: string) {
-    super(message);
-    this.name = 'MatchError';
-  }
+function sameRecord(left: unknown, right: unknown): boolean {
+  const canonical = (value: unknown) => JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
+  return canonical(left) === canonical(right);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -482,4 +495,14 @@ function validateIntents(intents: unknown, actors: readonly ActorState[]): void 
     }
     seen.add(intent.actorId);
   }
+}
+
+function resolveMatchRules(overrides: Partial<MatchRules> | undefined): MatchRules {
+  const rules = { ...defaults, ...overrides };
+  // Existing high-speed/capacity scenarios retain their base capabilities when no cap was supplied.
+  if (!Object.hasOwn(overrides ?? {}, 'maxBombCapacity')) rules.maxBombCapacity = Math.max(defaults.maxBombCapacity, rules.bombCapacity);
+  if (!Object.hasOwn(overrides ?? {}, 'maxBlastRange')) rules.maxBlastRange = Math.max(defaults.maxBlastRange, rules.blastRange);
+  if (!Object.hasOwn(overrides ?? {}, 'maxSpeed')) rules.maxSpeed = Math.max(defaults.maxSpeed, rules.speed);
+  validateRules(rules);
+  return rules;
 }

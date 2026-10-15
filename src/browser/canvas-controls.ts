@@ -4,9 +4,9 @@ import type { GameFrame } from '../game-flow/session.js';
 import type { Position } from '../match/index.js';
 import { arenaLayout as layout } from './layout.js';
 
-type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry';
+type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry' | 'newMatch';
 type PointerEventName = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture';
-type Commands = { pause(): void; resume(): void; retry(): void };
+type Commands = { pause(): void; resume(): void; retry(): void; newMatch(): void };
 const ink = 0xeaf3ed, accent = 0x83dfb6, surface = 0x173737;
 
 /** Canvas presentation and native pointer capture; gameplay receives only intents. */
@@ -33,6 +33,7 @@ export class CanvasControls {
     label(layout.bomb.x, layout.bomb.y + 28, '放弹');
     this.pauseLabel = label(layout.pause.x, layout.pause.y, '暂停');
     label(layout.retry.x, layout.retry.y, '重试');
+    label(layout.newMatch.x, layout.newMatch.y, '新开一局', 22);
     const pauseTitle = label(512, 254, '已暂停', 36);
     this.pauseMessage = label(512, 298, '点击继续，重新操作', 22);
     const resumeLabel = label(layout.resume.x, layout.resume.y, '继续游戏', 28).setColor('#102b2c');
@@ -47,7 +48,7 @@ export class CanvasControls {
     for (const [name, listener] of this.listeners) this.canvas.addEventListener(name, listener);
   }
 
-  present(frame: GameFrame, touch: TouchState): void {
+  present(frame: Pick<GameFrame, 'phase' | 'pauseReason'>, touch: TouchState): void {
     this.phase = frame.phase;
     const g = this.graphics.clear();
     const active = this.phase === 'playing';
@@ -64,14 +65,14 @@ export class CanvasControls {
     g.lineStyle(3, active ? 0xf1ca7c : 0x79958c).strokeCircle(layout.bomb.x, layout.bomb.y, layout.bomb.radius);
     g.lineStyle(3, ink).strokeCircle(layout.bomb.x, layout.bomb.y - 17, 18)
       .lineBetween(layout.bomb.x + 8, layout.bomb.y - 33, layout.bomb.x + 16, layout.bomb.y - 43);
-    for (const button of [layout.pause, layout.retry]) {
+    for (const button of [layout.pause, layout.retry, layout.newMatch]) {
       g.fillStyle(surface).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       g.lineStyle(2, 0x79958c).strokeRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
     }
     this.pauseLabel.setAlpha(active ? 1 : 0.45);
     for (const item of this.pauseLabels) item.setVisible(this.phase === 'paused');
     if (this.phase === 'paused') {
-      g.fillStyle(0x102b2c, 0.96).fillRect(layout.board.x, layout.board.y, 540, 420);
+      g.fillStyle(0x102b2c, 0.96).fillRect(layout.board.x, layout.board.y, layout.board.width, layout.board.height);
       const button = layout.resume;
       g.fillStyle(accent).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       this.pauseMessage.setText(frame.pauseReason === 'background' ? '离开页面已暂停，返回后手动继续' : '点击继续，重新操作');
@@ -104,7 +105,7 @@ export class CanvasControls {
   private down(event: PointerEvent): void {
     if (event.button !== 0 || this.pointers.has(event.pointerId)) return;
     const point = this.position(event);
-    const available: Control[] = this.phase === 'paused' ? ['resume', 'retry'] : this.phase === 'ended' ? ['retry'] : ['pause', 'retry', 'joystick', 'bomb'];
+    const available: Control[] = this.phase === 'paused' ? ['resume', 'retry', 'newMatch'] : this.phase === 'ended' ? ['retry', 'newMatch'] : ['pause', 'retry', 'newMatch', 'joystick', 'bomb'];
     const control = available.find(item => this.inside(item, point));
     if (!control) return;
     if ((control === 'joystick' || control === 'bomb') && !this.input.pointerDown(event.pointerId, control, this.offset(point))) return;

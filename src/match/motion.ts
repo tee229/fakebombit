@@ -19,7 +19,7 @@ export function pathTouchesCell(path: readonly Position[], cell: Position, radiu
   return path.length === 1 && overlapsCell(path[0]!, cell, radius);
 }
 
-function moveAxis(position: Position, direction: Direction, distance: number, map: CollisionMap, radius: number): Position {
+export function moveAxis(position: Position, direction: Direction, distance: number, map: CollisionMap, radius: number): Position {
   const vector = vectors[direction];
   const axis = vector.x === 0 ? 'y' : 'x';
   const across = axis === 'x' ? 'y' : 'x';

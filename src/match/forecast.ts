@@ -1,4 +1,5 @@
-import type { Blocker, BombState, Position, WorldState } from './index.js';
+import type { Blocker, BombState, Position } from './index.js';
+import type { QueryWorld } from './queries.js';
 import { calculateExplosions } from './explosions.js';
 import { freeze } from './immutable.js';
 
@@ -23,7 +24,7 @@ export interface DangerForecast {
 }
 
 /** No future intents, pickups, RNG or result arbitration: simulate only known explosion facts. */
-export function forecastDanger(world: WorldState): DangerForecast {
+export function forecastDanger(world: QueryWorld): DangerForecast {
   if (world.result) return freeze({ fromTick: world.tick, untilTick: world.tick, windows: [], explosions: [], changes: [{ tick: world.tick, blockers: [...world.blockers], bombs: [...world.bombs] }] });
   let tick = world.tick;
   let bombs = [...world.bombs];

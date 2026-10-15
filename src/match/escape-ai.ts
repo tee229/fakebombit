@@ -1,6 +1,6 @@
 import type { ActorState, Direction, GameplayIntent, WorldState } from './index.js';
 import { forecastDanger } from './forecast.js';
-import { projectStep, safeToWait } from './queries.js';
+import { projectStep, safeToWait, type QueryWorld } from './queries.js';
 
 export interface EscapeAiConfig {
   readonly reactionSeconds: number;
@@ -16,7 +16,7 @@ export interface EscapeAiState {
   readonly remainingSteps: number;
 }
 
-function findEscape(world: WorldState, actor: ActorState, config: EscapeAiConfig) {
+export function findEscape(world: QueryWorld, actor: ActorState, config: Pick<EscapeAiConfig, 'maxSearchStates' | 'searchHorizonSeconds'>) {
   const forecast = forecastDanger(world);
   type Node = { actor: ActorState; tick: number; exitBombIds: readonly string[]; parent: number; move: Direction | null };
   const queue: Node[] = [{ actor, tick: world.tick, exitBombIds: world.bombs.filter(bomb => bomb.exitActorIds.includes(actor.id)).map(bomb => bomb.id), parent: -1, move: null }];

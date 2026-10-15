@@ -224,7 +224,7 @@ test('recreates the same world after every tick from the frozen initialization r
   const source = { ...config, map: cornerMap, rules: { tickRate: 10, speed: 3, turnTolerance: 0, turnBufferTicks: 3 } };
   const first = createMatch(source);
   const record = first.readWorld().initialization;
-    expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'escape-ai-v1', map: 'fixed-map-v1', generator: 'none', ai: 'escape-ai-v1' }, actors: config.actors });
+    expect(record).toMatchObject({ seed: 'movement-example', rules: { tickRate: 10, speed: 3 }, versions: { match: 'generated-map-v1', map: 'semantic-map-v1', generator: 'symmetric-map-v1', ai: 'escape-ai-v1' }, actors: config.actors });
   const retry = createMatch(record);
   source.rules.speed = 99;
   const path = ['right', 'right', 'down', undefined, 'down', 'down', 'left', null] as const;
@@ -243,7 +243,7 @@ test('rejects a recorded initialization that requires another implementation ver
   expect(() => createMatch(record)).toThrowError(expect.objectContaining({ code: 'invalid-config' }));
 });
 
-test.each(['chain-bombs-v1', 'chain-bombs-v2', 'center-line-movement-v1', 'items-v1'])('rejects initialization recorded with earlier gameplay rules: %s', version => {
+test.each(['chain-bombs-v1', 'chain-bombs-v2', 'center-line-movement-v1', 'items-v1', 'escape-ai-v1'])('rejects initialization recorded with earlier gameplay rules: %s', version => {
   const record = structuredClone(createMatch(config).readWorld().initialization);
   Reflect.set(record.versions, 'match', version);
   expect(() => createMatch(record)).toThrowError(expect.objectContaining({ code: 'invalid-config' }));

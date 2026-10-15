@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { createMatch } from '../match/index.js';
+import { createMatch, MatchError, type InitializationRecord, type Match } from '../match/index.js';
 import { createPlayerInput, type PlayerInput } from '../input/player.js';
 import { createGameSession, type GameSession, type PauseReason, type GameFrame } from '../game-flow/session.js';
 import { EntitiesView } from './entities-view.js';
@@ -19,26 +19,59 @@ class TrainingScene extends Phaser.Scene {
   private inputState: PlayerInput | undefined;
   private controls: CanvasControls | undefined;
   private phase: GameFrame['phase'] = 'playing';
+  private initialization: InitializationRecord | undefined;
   constructor() { super('training'); }
 
   create(): void {
-    const requestedArena = new URLSearchParams(window.location.search).get('arena');
-    const arena = requestedArena === 'items' || requestedArena === 'escape' ? requestedArena : 'training';
-    const match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : createMatch(trainingMatchConfig);
+    const url = new URL(window.location.href);
+    const requestedArena = url.searchParams.get('arena');
+    const arena = requestedArena === 'items' || requestedArena === 'escape' || requestedArena === 'training' ? requestedArena : 'generated';
+    const canvas = this.game.canvas;
+    for (const key of Object.keys(canvas.dataset)) delete canvas.dataset[key];
+    let match: Match | undefined;
+    let failure: unknown;
+    try {
+      if (arena === 'generated') {
+        const seed = url.searchParams.get('seed') ?? freshSeed();
+        url.searchParams.set('seed', seed); window.history.replaceState(null, '', url);
+        match = createMatch(this.initialization ?? { seed, generator: {}, playerId: 'player', actors: trainingMatchConfig.actors });
+        this.initialization = match.readWorld().initialization;
+      } else match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : createMatch(trainingMatchConfig);
+    } catch (error) {
+      if (!(error instanceof MatchError)) throw error;
+      failure = error;
+      this.phase = 'ended'; canvas.dataset.phase = 'failed'; canvas.dataset.error = error.message;
+      const style = { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', color: '#eaf3ed' };
+      this.add.text(512, 205, '无法开始本局', { ...style, fontSize: '32px' }).setOrigin(0.5);
+      this.add.text(512, 275, error.code === 'generation-failed' ? '初始逃生验证未通过，生成尝试已结束。' : '种子或配置无效。', { ...style, fontSize: '20px' }).setOrigin(0.5);
+      this.add.text(512, 330, '点击新开一局换图，或重试当前种子。', { ...style, fontSize: '20px' }).setOrigin(0.5);
+    }
     const input = createPlayerInput();
     this.inputState = input;
-    this.session = createGameSession(match, input);
-    const view = new EntitiesView(this, match.readWorld(), arena);
+    this.session = match ? createGameSession(match, input) : undefined;
+    const view = match ? new EntitiesView(this, match.readWorld(), arena) : undefined;
     this.view = view;
     this.lastResult = '';
-    this.phase = 'playing';
+    this.phase = match ? 'playing' : 'ended';
     this.controls = new CanvasControls(this, input, {
       pause: () => this.pause('manual'), resume: () => this.resume(), retry: () => this.scene.restart(),
+      newMatch: () => this.newMatch(),
     });
-    this.controls.present(this.session.advanceFrame(0), input.readTouch());
+    this.controls.present(this.session?.advanceFrame(0) ?? { phase: 'ended', pauseReason: null }, input.readTouch());
+    if (match) {
+      const world = match.readWorld();
+      canvas.dataset.seed = world.initialization.seed;
+      canvas.dataset.map = JSON.stringify(world.initialMap.blockers);
+      canvas.dataset.mapWidth = String(world.initialMap.width); canvas.dataset.mapHeight = String(world.initialMap.height);
+      canvas.dataset.generationSource = world.initialization.generation?.source ?? 'fixed';
+      canvas.dataset.generationAttempts = String(world.initialization.generation?.attempts.length ?? 0);
+    }
     const keyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.code === 'KeyR') {
+      if (event.code === 'KeyN') {
+        event.preventDefault();
+        if (!event.repeat) this.newMatch();
+      } else if (event.code === 'KeyR') {
         event.preventDefault();
         if (!event.repeat) this.scene.restart();
       } else if (event.code === 'Escape' || event.code === 'KeyP' || (event.code === 'Enter' && this.phase === 'paused')) {
@@ -67,7 +100,7 @@ class TrainingScene extends Phaser.Scene {
       window.removeEventListener('resize', clearInput);
       document.removeEventListener('visibilitychange', visibility);
       this.controls?.destroy(); this.sound.stopAll();
-      input.clear(); view.destroy();
+      input.clear(); view?.destroy();
       this.controls = undefined; this.inputState = undefined;
       this.session = undefined; this.view = undefined;
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup);
@@ -77,13 +110,22 @@ class TrainingScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
     this.game.canvas.tabIndex = 0;
     this.game.canvas.setAttribute('role', 'application');
-    const arenaLabels = { training: '实体训练场：玩家、墙、障碍、三类道具，一个逃生 AI 及两个静止目标', items: '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标', escape: '逃生练习场：观察 AI 从两颗已知炸弹的连锁范围逃生，R 重放' };
-    this.game.canvas.setAttribute('aria-label', arenaLabels[arena]);
+    const arenaLabels = { generated: '种子地图：四角对称的随机地图，R 重试，N 新开一局', training: '实体训练场：玩家、墙、障碍、三类道具，一个逃生 AI 及两个静止目标', items: '道具练习场：上行后向右依次拾取距离、容量、速度道具；三个静止目标', escape: '逃生练习场：观察 AI 从两颗已知炸弹的连锁范围逃生，R 重放' };
+    this.game.canvas.setAttribute('aria-label', `${arenaLabels[arena]}。种子：${canvas.dataset.seed ?? url.searchParams.get('seed') ?? ''}`);
     this.game.canvas.setAttribute('aria-describedby', 'instructions');
     this.game.canvas.focus({ preventScroll: true });
     const status = document.getElementById('game-status');
-    if (status) status.textContent = '训练已开始。左侧摇杆移动，右侧放弹；支持 WASD、空格、R 重试和 P 暂停。';
+    if (status) status.textContent = failure ? `无法开始本局：${canvas.dataset.error}。按 N 新开一局，R 重试。` : '本局已开始。左侧摇杆移动，右侧放弹；WASD、空格、R 重试、N 新开一局和 P 暂停。完整种子显示在页面地址中。';
     if (document.visibilityState === 'hidden') background();
+  }
+
+  private newMatch(): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set('seed', freshSeed(url.searchParams.get('seed')));
+    url.searchParams.delete('arena');
+    window.history.replaceState(null, '', url);
+    this.initialization = undefined;
+    this.scene.restart();
   }
 
   private pause(reason: PauseReason): void {
@@ -145,6 +187,11 @@ class TrainingScene extends Phaser.Scene {
       if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局。`;
     }
   }
+}
+
+function freshSeed(previous: string | null = null): string {
+  const seed = [...crypto.getRandomValues(new Uint32Array(2))].map(value => value.toString(36)).join('-');
+  return seed === previous ? `${seed}-n` : seed;
 }
 
 const fpsParameter = new URLSearchParams(window.location.search).get('fps');
