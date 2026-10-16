@@ -1,6 +1,6 @@
 # Built-in character skins, private format v1
 
-Issue #13 adds **薄荷兔** (`mint`) and **珊瑚机甲** (`coral`), independently selectable with either map theme. The chosen skin applies to this match's actors; P / AI / numbered labels preserve their identities. R retains skin, theme and initialization; N retains the selections and opens the chooser for a new seed. Left/right selects the theme; up/down selects the skin. Canvas panels support pointer selection.
+Issue #13 adds **薄荷兔** (`mint`) and **珊瑚机甲** (`coral`), independently selectable with either map theme. The chosen skin applies to this match's actors. Since #18, names and live abilities appear in side cards, matched to cosmetic ground-ring colors; no name text covers the character. R retains skin, theme and initialization; N retains the selections and opens the chooser for a new seed. Left/right selects the theme; up/down selects the skin. Canvas panels support pointer selection.
 
 The user cancelled hats on 2026-10-16. This release has no attachments, attachment anchors, attachment transforms or attachment occlusion requirements. A sprite's ordinary origin positions the body; it is not an attachment anchor.
 

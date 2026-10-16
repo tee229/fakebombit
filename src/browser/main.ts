@@ -55,7 +55,7 @@ class TrainingScene extends Phaser.Scene {
     const toggleLabel = this.add.text(300, 34, '实体视图 V', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '17px', color: '#eaf3ed' }).setOrigin(0.5);
     const switchView = () => { this.view?.toggleMode(); toggleLabel.setText(canvas.dataset.view === 'normal' ? '实体视图 V' : '正常画面 V'); };
     toggle.on('pointerup', switchView);
-    if (theme.diagnostics.length) this.add.text(820, 263, '装饰缺失，已省略', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '14px', color: '#ffaf8c' });
+    if (theme.diagnostics.length) this.add.text(820, 281, '装饰缺失，已省略', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '14px', color: '#ffaf8c' });
     const keyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.code === 'KeyN') {
@@ -182,7 +182,7 @@ class TrainingScene extends Phaser.Scene {
     if (result && result !== this.lastResult) {
       this.lastResult = result;
       const status = document.getElementById('game-status');
-      if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局，按 N 新开一局，也可点击右侧对应按钮。`;
+      if (status) status.textContent = `${resultLabels[result]}。按 R 重试本局，按 N 新开一局，也可点击两侧对应按钮。`;
     }
   }
 }

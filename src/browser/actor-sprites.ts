@@ -2,14 +2,19 @@ import Phaser from 'phaser';
 import type { WorldState } from '../match/index.js';
 import type { ActorPose } from '../resources/skin-playback.js';
 import { interpolatePosition } from './interpolate-position.js';
+import { actorIdentity } from './actor-identity.js';
 
 /** Phaser plays the declared frames; all timing and movement here are purely cosmetic. */
 export class ActorSprites {
   private readonly sprites = new Map<string, Phaser.GameObjects.Sprite>();
-  constructor(private readonly scene: Phaser.Scene, private readonly root: Phaser.GameObjects.Container) {}
+  private readonly markers: Phaser.GameObjects.Graphics;
+  constructor(private readonly scene: Phaser.Scene, private readonly root: Phaser.GameObjects.Container) {
+    this.markers = scene.add.graphics().setDepth(6.5); root.add(this.markers);
+  }
 
   present(world: WorldState, alpha: number, poses: readonly ActorPose<HTMLImageElement>[], paused: boolean): void {
     const live = new Set<string>();
+    this.markers.clear();
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     for (const pose of poses) {
       const actor = world.actors.find(actor => actor.id === pose.id)!;
@@ -26,6 +31,7 @@ export class ActorSprites {
       if (freeze) sprite.anims.pause(); else sprite.anims.resume();
       if (reducedMotion) sprite.anims.setCurrentFrame(sprite.anims.currentAnim!.frames[0]!);
       const position = interpolatePosition(actor, world.result || !actor.alive ? 1 : alpha);
+      if (actor.alive) this.markers.lineStyle(2.5, actorIdentity(world, actor).color).strokeEllipse(position.x * 60, position.y * 60 + 17, 42, 16);
       sprite.setOrigin(visual.anchor.x, visual.anchor.y).setFlipX(visual.flipX)
         .setPosition(position.x * 60 + visual.offset.x * 60 / visual.referenceSize.width, position.y * 60 + visual.offset.y * 60 / visual.referenceSize.height)
         .setScale(60 / visual.referenceSize.width, 60 / visual.referenceSize.height).setDepth(7);

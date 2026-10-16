@@ -29,7 +29,6 @@ export class CanvasControls {
       const item = scene.add.text(x, y, text, { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: `${size}px`, color: '#eaf3ed' }).setOrigin(0.5);
       this.root.add(item); return item;
     };
-    label(layout.joystick.x, 500, '拖动移动');
     label(layout.bomb.x, layout.bomb.y + 28, '放弹');
     this.pauseLabel = label(layout.pause.x, layout.pause.y, '暂停');
     label(layout.retry.x, layout.retry.y, '重试');
