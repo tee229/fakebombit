@@ -49,13 +49,19 @@ export interface ReadyTheme<T> {
 export class ResourceError extends Error {
   constructor(readonly code: 'invalid-package' | 'load-failed' | 'size-mismatch', message: string) { super(message); this.name = 'ResourceError'; }
 }
+function sampleAnimation(definition: VisualDefinition, elapsedSeconds: number) {
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) throw new RangeError('Visual time must be finite and nonnegative');
+  const elapsedFrame = Math.floor(elapsedSeconds * definition.framesPerSecond);
+  return {
+    index: definition.loop ? elapsedFrame % definition.frames.length : Math.min(elapsedFrame, definition.frames.length - 1),
+    finished: !definition.loop && elapsedFrame >= definition.frames.length,
+  };
+}
 export function resolveVisual<T>(ready: ReadyTheme<T>, slot: VisualSlot, elapsedSeconds = 0) {
   const definition = ready.package.slots[slot];
   const image = definition && ready.images[definition.resource];
   if (!definition || !image) return null;
-  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) throw new RangeError('Visual time must be finite and nonnegative');
-  const elapsedFrame = Math.floor(elapsedSeconds * definition.framesPerSecond);
-  const index = definition.loop ? elapsedFrame % definition.frames.length : Math.min(elapsedFrame, definition.frames.length - 1);
+  const { index } = sampleAnimation(definition, elapsedSeconds);
   return { image, frame: definition.frames[index]!, referenceSize: definition.referenceSize, anchor: definition.anchor, offset: definition.offset, facing: definition.facing };
 }
 /** Presentation-only sampling; Phaser uses this same clip for actual Sprite playback. */
@@ -63,12 +69,10 @@ export function resolveSkinAnimation<T>(ready: ReadyTheme<T>, action: SkinAction
   const definition = ready.package.skin?.animations[action][direction];
   const image = definition && ready.images[definition.resource];
   if (!definition || !image) return null;
-  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) throw new RangeError('Visual time must be finite and nonnegative');
-  const elapsedFrame = Math.floor(elapsedSeconds * definition.framesPerSecond);
-  const index = definition.loop ? elapsedFrame % definition.frames.length : Math.min(elapsedFrame, definition.frames.length - 1);
+  const { index, finished } = sampleAnimation(definition, elapsedSeconds);
   return { image, frame: definition.frames[index]!, frameIndex: index, frames: definition.frames, framesPerSecond: definition.framesPerSecond,
     loop: definition.loop, flipX: definition.flipX, referenceSize: definition.referenceSize, anchor: definition.anchor, offset: definition.offset,
-    finished: !definition.loop && elapsedFrame >= definition.frames.length };
+    finished };
 }
 export type PreparationResult<M> = { readonly status: 'ready'; readonly value: M } | { readonly status: 'failed'; readonly error: ResourceError } | { readonly status: 'cancelled' };
 
