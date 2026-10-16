@@ -174,7 +174,7 @@ The guard is deliberately conservative: aliasing the entire `Math` object, using
 
 ## Browser input, flow, and interpolation
 
-`src/browser/theme-scene.ts` prepares the chosen theme before creating a match; `src/browser/main.ts` composes keyboard input, game session, and Phaser view; the session exclusively advances its match through the three existing public operations. The renderer only reads frozen state and ordered events. Browser types use a separate TypeScript configuration; the match still checks with ES2023 only, without DOM/Node/engine types.
+`src/game-flow/index.ts` owns menu, preparation, play, pause, result and failure; `src/browser/theme-scene.ts` renders menu states, and `src/browser/main.ts` composes resources, input and Phaser presentation; the session exclusively advances its match through the three existing public operations. The renderer only reads frozen state and ordered events. Browser types use a separate TypeScript configuration; the match still checks with ES2023 only, without DOM/Node/engine types.
 
 The keyboard interface owns held keys and a pending bomb action. The most recently pressed held direction wins, and releasing it restores another held direction. Automatic repeats never re-order directions or queue another bomb. `createPlayerInput` adds separately owned joystick and bomb pointers and outputs the same `GameplayIntent` contract. An active joystick owns movement, including neutral input inside its dead zone; when released, held keyboard movement is available again. Bomb taps from either device coalesce into one pending action, survive render frames without a logical step, and are consumed once on the first executed step, while movement continues through catch-up steps. Pointer cancellation clears all held input and pending actions. Restart creates fresh input, match, session, view, and event-consumption context; scene cleanup removes browser listeners, releases pointer capture and stops sound instances.
 
@@ -190,7 +190,7 @@ For rendering-frequency checks, open `/?fps=30`, `/?fps=60`, or `/?fps=120`. The
 
 For #6, the user confirmed keyboard-intent and game-session frame seams with review baseline `b1986ee`. For #7, the user confirmed touch-input intents and game-session step/pause/resume seams with review baseline `6a0b3e1`. Game-flow tests use real input and real matches rather than internal mocks. Core movement/bomb/chain checks remain unchanged.
 
-Themes/skins and the full game flow remain later tickets. The user completed #7's initial physical touch checks on Android + Edge: simultaneous movement/bombing, interruption during held input, manual resume without unintended actions, and dragging/turning without obvious mis-taps. Device-wide performance, browser coverage and final feel tuning remain #16's scope.
+Themes, skins and the complete canvas flow are implemented. **M / 返回菜单** exits from play, pause or result; Escape cancels preparation. Returning retains appearance and seed; N chooses a fresh seed. Each retry/return releases run-owned views, inputs and event cursors while application images stay cached. See the [flow contract](docs/game-flow.md) and [lifecycle validation](docs/validation/issue-14-game-flow.md). The user completed #7's initial physical touch checks on Android + Edge: simultaneous movement/bombing, interruption during held input, manual resume without unintended actions, and dragging/turning without obvious mis-taps. Device-wide performance, browser coverage and final feel tuning remain #16's scope.
 
 ## Built-in themes
 

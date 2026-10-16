@@ -68,9 +68,9 @@ export class MatchView {
     this.text(242, 550, `种子 ${seed.length > 24 ? `${seed.slice(0, 23)}…` : seed}  ·  ${world.initialMap.width} × ${world.initialMap.height}`, 14, '#b8d1c6');
     this.result = scene.add.container(0, 0).setVisible(false);
     this.root.add(this.result);
-    const shade = scene.add.rectangle(512, 310, 510, 205, colors.background, 0.97).setStrokeStyle(2, colors.player);
+    const shade = scene.add.rectangle(512, 310, 510, 232, colors.background, 0.97).setStrokeStyle(2, colors.player);
     this.resultTitle = scene.add.text(512, 270, '', { fontFamily: font, fontSize: '34px', fontStyle: 'bold', color: '#eaf3ed' }).setOrigin(0.5);
-    const actions = scene.add.text(512, 346, '重试本局：R / 右侧「重试」\n新开一局：N / 左侧「新开一局」', { fontFamily: font, fontSize: '22px', color: '#83dfb6', align: 'center', lineSpacing: 10 }).setOrigin(0.5);
+    const actions = scene.add.text(512, 354, '重试本局：R / 右下角\n新开一局：N / 左下角\n返回菜单：M / 右上角', { fontFamily: font, fontSize: '21px', color: '#83dfb6', align: 'center', lineSpacing: 8 }).setOrigin(0.5);
     this.result.add([shade, this.resultTitle, actions]);
     this.present(world, 0, []);
   }

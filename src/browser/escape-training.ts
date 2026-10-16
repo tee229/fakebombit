@@ -1,12 +1,12 @@
-import { createMatch, type Blocker, type Match } from '../match/index.js';
+import { createMatch, type Blocker, type Match, type InitializationRecord } from '../match/index.js';
 
 /** Known bombs are staggered so the first explosion must ignite the later one. */
-export function createEscapeTrainingMatch(): Match {
+export function createEscapeTrainingMatch(initialization?: InitializationRecord): Match {
   const blockers: Blocker[] = [];
   for (let y = 0; y < 7; y++) for (let x = 0; x < 9; x++) {
     if (x === 0 || x === 8 || y === 0 || y === 6) blockers.push({ id: `wall-${x}-${y}`, type: 'solid-wall', x, y });
   }
-  const match = createMatch({ seed: 'escape-training-v1', playerId: 'player', rules: { blastRange: 2 },
+  const match = createMatch(initialization ?? { seed: 'escape-training-v1', playerId: 'player', rules: { blastRange: 2 },
     map: { width: 9, height: 7, ground: Array.from({ length: 63 }, () => 'floor'), blockers,
       spawns: [{ id: 'player', x: 1, y: 1 }, { id: 'ai', x: 4, y: 3 }, { id: 'bomber', x: 3, y: 3 }] },
     actors: [{ id: 'player', type: 'actor', spawnId: 'player' }, { id: 'enemy', type: 'actor', spawnId: 'ai', ai: {} },
