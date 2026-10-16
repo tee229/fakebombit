@@ -5,11 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#102b2c" />
     <meta name="description" content="Fake Bomb It 种子地图触屏与键盘训练场，支持重试和新开一局。" />
-    <title>Fake Bomb It · 实体训练场</title>
+    <title>Fake Bomb It · 糖果乐园与玩具工厂</title>
   </head>
   <body>
-    <main id="game" aria-label="Fake Bomb It 实体训练场"></main>
+    <main id="game" aria-label="Fake Bomb It 主题对战"></main>
     <p id="instructions" class="sr-only">横屏使用左侧四向摇杆移动，右侧按钮放弹，也可使用 WASD 或方向键及空格。点击暂停或按 P、Escape 暂停，点击继续游戏或按 Enter 手动继续。R 或重试按钮重试同一地图；N 或新开一局按钮更换种子。完整种子保存在页面地址中。离开页面会自动暂停；炸弹三秒后爆炸。炸开障碍后等待火焰消失，再拾取容量、距离或速度道具；当前属性显示在上方。</p>
+    <p class="sr-only">开局前用左右方向键选择主题，Enter 开始，Escape 取消资源准备。局内按 V 或上方按钮切换正常画面和实体视图。N 新开一局时可重新选主题，R 沿用本局主题与地图。</p>
     <p id="game-status" class="sr-only" role="status" aria-live="polite"></p>
     <noscript>请启用 JavaScript 运行键盘训练场。</noscript>
     <script type="module" src="/src/browser/main.ts"></script>

@@ -8,6 +8,7 @@
 
 # Local work and logs
 .scratch/
+.impeccable/review/
 *.log
 *.tmp
 *.swp

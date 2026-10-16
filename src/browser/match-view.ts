@@ -3,6 +3,8 @@ import type { GameplayEvent, ItemKind, WorldState } from '../match/index.js';
 import { resultLabels } from './result-labels.js';
 import { interpolatePosition } from './interpolate-position.js';
 import { arenaLayout } from './layout.js';
+import { NormalBoard } from './normal-board.js';
+import type { ReadyTheme } from '../resources/index.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
@@ -18,7 +20,10 @@ const itemDisplay = {
 const aiLabels = { observing: '观察中', safe: '安全', escaping: '逃生中', collecting: '拾取道具', breaking: '炸开障碍', threatening: '接近对手', 'no-route': '未找到安全路', 'budget-exhausted': '搜索预算不足', eliminated: '已淘汰' } as const;
 
 /** The view reads gameplay facts; drawing and event history never alter the match. */
-export class EntitiesView {
+export class MatchView {
+  private normalBoard: NormalBoard | undefined;
+  private mode: 'normal' | 'entities' = 'normal';
+  private current: { world: WorldState; alpha: number };
   private readonly root: Phaser.GameObjects.Container;
   private readonly graphics: Phaser.GameObjects.Graphics;
   private readonly boardRoot: Phaser.GameObjects.Container;
@@ -34,7 +39,8 @@ export class EntitiesView {
   private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
 
-  constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly arena: 'generated' | 'training' | 'items' | 'escape' | 'normal' = 'training') {
+  constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly theme: ReadyTheme<HTMLImageElement>, private readonly arena: 'generated' | 'training' | 'items' | 'escape' | 'normal' = 'training') {
+    this.current = { world, alpha: 0 };
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
@@ -44,13 +50,14 @@ export class EntitiesView {
     this.boardRoot = scene.add.container(area.x + (area.width - world.initialMap.width * cell) / 2, area.y + (area.height - world.initialMap.height * cell) / 2).setScale(scale);
     this.boardGraphics = scene.add.graphics();
     this.boardRoot.add(this.boardGraphics); this.root.add(this.boardRoot);
+    this.normalBoard = new NormalBoard(scene, this.boardRoot, theme);
     this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
     const arenaTitles = { generated: '种子地图', normal: '正常 AI 练习场', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
     this.text(24, 63, this.arena === 'generated' ? `1 对 ${world.actors.length - 1} · 正常难度` : `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
     this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
-    this.abilitiesLabel = this.text(350, 58, '', 18, '#b8d1c6');
+    this.abilitiesLabel = this.text(386, 58, '', 18, '#b8d1c6');
     this.text(24, 110, '场上变化', 22, '#eaf3ed', '600');
     const arenaHelp = { generated: '找道具，炸开通路\n注意 AI 的炸弹', normal: '原地放弹封口\n左移、下行躲开', training: '炸开障碍后\n等火焰消失再拾取', items: '上行，再右移\n依次拾取上方道具', escape: '观察 AI 躲开连锁\nR 可重放同一场景' };
     this.history = this.text(24, 150, arenaHelp[this.arena], 16, '#b8d1c6');
@@ -144,7 +151,7 @@ export class EntitiesView {
       if (player) g.fillPoints([{ x, y: y - 22 }, { x: x + 22, y }, { x, y: y + 22 }, { x: x - 22, y }], true);
       else g.fillCircle(x, y, 20);
       if (actor.ai) g.lineStyle(2, colors.player).strokeCircle(x, y, 23);
-      label.setPosition(x, y);
+      label.setPosition(x, y + (this.mode === 'normal' ? 19 : 0));
     }
     // The legend uses the same geometric grammar, never texture-derived gameplay facts.
     const legend = this.graphics.clear();
@@ -164,6 +171,18 @@ export class EntitiesView {
     this.result.setVisible(world.result !== null);
     if (world.result) this.resultTitle.setText(resultLabels[world.result.outcome]);
     this.scene.game.canvas.dataset.consumedEvents = String(this.consumedEvents);
+    this.current = { world, alpha };
+    this.boardGraphics.setVisible(this.mode === 'entities');
+    this.normalBoard?.present(world, alpha);
+    this.scene.game.canvas.dataset.view = this.mode;
+    this.scene.game.canvas.dataset.theme = this.theme.id;
+  }
+
+  toggleMode(): void {
+    this.mode = this.mode === 'normal' ? 'entities' : 'normal';
+    this.normalBoard?.destroy();
+    this.normalBoard = this.mode === 'normal' ? new NormalBoard(this.scene, this.boardRoot, this.theme) : undefined;
+    this.present(this.current.world, this.current.alpha, []);
   }
 
   destroy(): void { this.root.destroy(true); }

@@ -1,21 +1,19 @@
 import Phaser from 'phaser';
-import { createMatch, MatchError, type InitializationRecord, type Match } from '../match/index.js';
+import type { InitializationRecord } from '../match/index.js';
 import { createPlayerInput, type PlayerInput } from '../input/player.js';
 import { createGameSession, type GameSession, type PauseReason, type GameFrame } from '../game-flow/session.js';
-import { EntitiesView } from './entities-view.js';
-import { trainingMatchConfig } from './training-map.js';
+import { MatchView } from './match-view.js';
+import { ThemeScene, freshSeed, type PreparedMatch } from './theme-scene.js';
 import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
-import { createItemTrainingMatch } from './item-training.js';
-import { createEscapeTrainingMatch } from './escape-training.js';
-import { createNormalTrainingMatch } from './normal-training.js';
 import './style.css';
 
 // This is the only composition root: input -> game flow -> readonly state/events -> Phaser view.
 class TrainingScene extends Phaser.Scene {
   private session: GameSession | undefined;
-  private view: EntitiesView | undefined;
+  private view: MatchView | undefined;
+  private prepared!: PreparedMatch;
   private lastResult = '';
   private inputState: PlayerInput | undefined;
   private controls: CanvasControls | undefined;
@@ -23,44 +21,24 @@ class TrainingScene extends Phaser.Scene {
   private initialization: InitializationRecord | undefined;
   constructor() { super('training'); }
 
+  init(prepared: PreparedMatch): void { this.prepared = prepared; }
+
   create(): void {
     const url = new URL(window.location.href);
-    const requestedArena = url.searchParams.get('arena');
-    const arena = requestedArena === 'items' || requestedArena === 'escape' || requestedArena === 'training' || requestedArena === 'normal' ? requestedArena : 'generated';
+    const { match, arena, theme } = this.prepared;
+    this.initialization = match.readWorld().initialization;
     const canvas = this.game.canvas;
     for (const key of Object.keys(canvas.dataset)) delete canvas.dataset[key];
-    let match: Match | undefined;
-    let failure: unknown;
-    try {
-      if (arena === 'generated') {
-        const seed = url.searchParams.get('seed') ?? freshSeed();
-        url.searchParams.set('seed', seed); window.history.replaceState(null, '', url);
-        const requestedCount = Number(url.searchParams.get('ai'));
-        const aiCount = [1, 2, 3].includes(requestedCount) ? requestedCount : 3;
-        const requestedSeconds = Number(url.searchParams.get('seconds'));
-        const matchDurationSeconds = Number.isInteger(requestedSeconds) && requestedSeconds >= 1 && requestedSeconds <= 120 ? requestedSeconds : 120;
-        const actors = ['player', 'target-1', 'target-2', 'target-3'].slice(0, aiCount + 1).map(id => ({ id, type: 'actor' as const, spawnId: id, ...(id === 'player' ? {} : { ai: { mode: 'normal' as const } }) }));
-        match = createMatch(this.initialization ?? { seed, generator: {}, playerId: 'player', actors, rules: { matchDurationSeconds } });
-        this.initialization = match.readWorld().initialization;
-      } else match = arena === 'items' ? createItemTrainingMatch() : arena === 'escape' ? createEscapeTrainingMatch() : arena === 'normal' ? createNormalTrainingMatch() : createMatch(trainingMatchConfig);
-    } catch (error) {
-      if (!(error instanceof MatchError)) throw error;
-      failure = error;
-      this.phase = 'ended'; canvas.dataset.phase = 'failed'; canvas.dataset.error = error.message;
-      const style = { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', color: '#eaf3ed' };
-      this.add.text(512, 205, '无法开始本局', { ...style, fontSize: '32px' }).setOrigin(0.5);
-      this.add.text(512, 275, error.code === 'generation-failed' ? '初始逃生验证未通过，生成尝试已结束。' : '种子或配置无效。', { ...style, fontSize: '20px' }).setOrigin(0.5);
-      this.add.text(512, 330, '点击新开一局换图，或重试当前种子。', { ...style, fontSize: '20px' }).setOrigin(0.5);
-    }
+    canvas.dataset.diagnostics = JSON.stringify(theme.diagnostics);
     const input = createPlayerInput();
     this.inputState = input;
-    this.session = match ? createGameSession(match, input) : undefined;
-    const view = match ? new EntitiesView(this, match.readWorld(), arena) : undefined;
+    this.session = createGameSession(match, input);
+    const view = new MatchView(this, match.readWorld(), theme, arena);
     this.view = view;
     this.lastResult = '';
-    this.phase = match ? 'playing' : 'ended';
+    this.phase = 'playing';
     this.controls = new CanvasControls(this, input, {
-      pause: () => this.pause('manual'), resume: () => this.resume(), retry: () => this.scene.restart(),
+      pause: () => this.pause('manual'), resume: () => this.resume(), retry: () => this.retry(),
       newMatch: () => this.newMatch(),
     });
     this.controls.present(this.session?.advanceFrame(0) ?? { phase: 'ended', pauseReason: null }, input.readTouch());
@@ -73,6 +51,11 @@ class TrainingScene extends Phaser.Scene {
       canvas.dataset.generationAttempts = String(world.initialization.generation?.attempts.length ?? 0);
       canvas.dataset.aiCount = String(world.actors.filter(actor => actor.ai).length);
     }
+    const toggle = this.add.rectangle(300, 34, 108, 64, 0x24483f).setStrokeStyle(1, 0x83dfb6).setInteractive({ useHandCursor: true });
+    const toggleLabel = this.add.text(300, 34, '实体视图 V', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '17px', color: '#eaf3ed' }).setOrigin(0.5);
+    const switchView = () => { this.view?.toggleMode(); toggleLabel.setText(canvas.dataset.view === 'normal' ? '实体视图 V' : '正常画面 V'); };
+    toggle.on('pointerup', switchView);
+    if (theme.diagnostics.length) this.add.text(820, 263, '装饰缺失，已省略', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '14px', color: '#ffaf8c' });
     const keyDown = (event: KeyboardEvent) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.code === 'KeyN') {
@@ -80,7 +63,9 @@ class TrainingScene extends Phaser.Scene {
         if (!event.repeat) this.newMatch();
       } else if (event.code === 'KeyR') {
         event.preventDefault();
-        if (!event.repeat) this.scene.restart();
+        if (!event.repeat) this.retry();
+      } else if (event.code === 'KeyV') {
+        event.preventDefault(); if (!event.repeat) switchView();
       } else if (event.code === 'Escape' || event.code === 'KeyP' || (event.code === 'Enter' && this.phase === 'paused')) {
         event.preventDefault();
         if (!event.repeat) { if (this.phase === 'paused') this.resume(); else this.pause('manual'); }
@@ -122,8 +107,12 @@ class TrainingScene extends Phaser.Scene {
     this.game.canvas.setAttribute('aria-describedby', 'instructions');
     this.game.canvas.focus({ preventScroll: true });
     const status = document.getElementById('game-status');
-    if (status) status.textContent = failure ? `无法开始本局：${canvas.dataset.error}。按 N 新开一局，R 重试。` : '本局已开始。左侧摇杆移动，右侧放弹；WASD、空格、R 重试、N 新开一局和 P 暂停。完整种子显示在页面地址中。';
+    if (status) status.textContent = '本局已开始。左侧摇杆移动，右侧放弹；WASD、空格、R 重试、N 新开一局和 P 暂停。完整种子显示在页面地址中。';
     if (document.visibilityState === 'hidden') background();
+  }
+
+  private retry(): void {
+    this.scene.start('themes', { themeId: this.prepared.theme.id, initialization: this.initialization, autoStart: true });
   }
 
   private newMatch(): void {
@@ -132,7 +121,7 @@ class TrainingScene extends Phaser.Scene {
     url.searchParams.delete('arena');
     window.history.replaceState(null, '', url);
     this.initialization = undefined;
-    this.scene.restart();
+    this.scene.start('themes', { themeId: this.prepared.theme.id });
   }
 
   private pause(reason: PauseReason): void {
@@ -197,11 +186,6 @@ class TrainingScene extends Phaser.Scene {
   }
 }
 
-function freshSeed(previous: string | null = null): string {
-  const seed = [...crypto.getRandomValues(new Uint32Array(2))].map(value => value.toString(36)).join('-');
-  return seed === previous ? `${seed}-n` : seed;
-}
-
 const fpsParameter = new URLSearchParams(window.location.search).get('fps');
 const requestedFps = Number(fpsParameter);
 const renderFps = [30, 60, 120].includes(requestedFps) ? requestedFps : 60;
@@ -212,7 +196,7 @@ const game = new Phaser.Game({
   width: arenaLayout.width, height: arenaLayout.height,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   fps: { target: renderFps, forceSetTimeOut: fpsParameter !== null, smoothStep: false },
-  scene: TrainingScene,
+  scene: [ThemeScene, TrainingScene],
   audio: { noAudio: true },
 });
 
