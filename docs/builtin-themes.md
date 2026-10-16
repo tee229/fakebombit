@@ -1,12 +1,12 @@
 # Built-in themes, private format v1
 
-Issue #12 supplies 糖果乐园 (`candy`) and 玩具工厂 (`factory`). This is a private source-controlled contract, not a public pack importer or a promise of format compatibility. Character bodies are temporary theme-colored markers; separate skins and attachments belong to #13.
+Issue #12 supplies 糖果乐园 (`candy`) and 玩具工厂 (`factory`). This is a private source-controlled contract, not a public pack importer or a promise of format compatibility. Theme actor slots remain fallback definitions and illustrate theme previews. Issue #13 supplies independently selected [character skins](builtin-skins.md) for actual browser actors. Hats were cancelled by the user on 2026-10-16.
 
 ## Contract
 
 `ThemePackage` has `format: builtin-theme-v1`, nonempty `id` and `label`, a `resources` manifest and semantic `slots`. `src/resources/builtin-themes.ts` is the catalogue. Each image declares unique `id`, `url`, decoded `width`/`height`, `frameWidth`/`frameHeight`, and `required`. Dimensions are positive integers at most 4096 and must divide evenly into frames. Decoded sizes must match the manifest.
 
-Each slot declares a resource ID, nonempty zero-based row-major `frames`, `framesPerSecond`, `loop`, `facing: none`, `referenceSize`, `anchor`, and `offset`. Multiple frames require positive finite FPS. Non-looping animations hold their last frame. Single-frame slots permit zero FPS. Animations advance by logical world time, not wall clock. Each reference size is positive finite; anchors are fractions in [0,1]; offsets are finite reference-pixel units. The logical cell center maps to the anchor plus offset. Reference dimensions determine display scale; texture dimensions never determine collision. This version has no directional animation convention: the bodies face the viewer.
+Each slot declares a resource ID, nonempty zero-based row-major `frames`, `framesPerSecond`, `loop`, `facing: none`, `referenceSize`, `anchor`, and `offset`. Multiple frames require positive finite FPS. Non-looping animations hold their last frame. Single-frame slots permit zero FPS. Theme animations advance by logical world time. Each reference size is positive finite; anchors are fractions in [0,1]; offsets are finite reference-pixel units. The logical cell center maps to the anchor plus offset. Reference dimensions determine display scale; texture dimensions never determine collision. Directional character clips and their presentation clock belong to the separate skin contract.
 
 | Required slot | Meaning | Atlas frame(s) |
 | --- | --- | --- |
@@ -30,7 +30,7 @@ Each slot declares a resource ID, nonempty zero-based row-major `frames`, `frame
 
 The application owns successful and in-flight image promises, keyed by URL and frame/dimension metadata. Retry reuses them; failures are evicted. Cancellation ends the preparation immediately but does not abort shared image IO; a late image may populate the cache. Cancelled or superseded tasks cannot invoke their creation callback. The browser loader has a 10-second timeout. Page reload/HMR destroys the application cache; per-match objects and listeners are discarded on scene shutdown.
 
-`ThemeScene` owns selection/preparation/error UI; `MatchView` owns HUD and the one event cursor. Normal rendering resolves current world objects into sprites. Entities draws geometric objects. V or the canvas toggle rebuilds only the board from the current world; neither resets the cursor nor replays events. Dead actors and expired/destroyed objects are removed from current facts. Fire animation exists only while its hazard exists, including the frozen final world. Initial spawn markers and optional corner decoration are visual only.
+`ThemeScene` owns selection/preparation/error UI; `MatchView` owns HUD and the one event cursor. Normal rendering resolves current world objects into sprites. Entities draws geometric objects. V or the canvas toggle rebuilds only the board from the current world; neither resets the cursor nor replays events. Expired/destroyed objects are omitted; the separate skin presentation may briefly animate an eliminated actor without keeping it alive in gameplay. Fire animation exists only while its hazard exists, including the frozen final world. Initial spawn markers and optional corner decoration are visual only.
 
 N generates a fresh seed and returns to theme selection. R prepares the same theme and recreates the same initialization, using the cache. Theme choice is fixed for each match. No rules, generator or gameplay implementation version changed.
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { createResourcePreparation, type ThemePackage, type ReadyTheme } from '../resources/index.js';
+import { createResourcePreparation, withSkin, type SkinPackage, type ThemePackage, type ReadyTheme } from '../resources/index.js';
 import { builtinThemes } from '../resources/builtin-themes.js';
+import { builtinSkins } from '../resources/builtin-skins.js';
 import { createMatch, type InitializationRecord, type Match } from '../match/index.js';
 import { trainingMatchConfig } from './training-map.js';
 import { createItemTrainingMatch } from './item-training.js';
@@ -9,7 +10,7 @@ import { createNormalTrainingMatch } from './normal-training.js';
 
 export type Arena = 'generated' | 'items' | 'escape' | 'training' | 'normal';
 export interface PreparedMatch { readonly theme: ReadyTheme<HTMLImageElement>; readonly match: Match; readonly arena: Arena }
-interface Selection { readonly themeId?: string; readonly initialization?: InitializationRecord; readonly autoStart?: boolean }
+interface Selection { readonly themeId?: string; readonly skinId?: string; readonly initialization?: InitializationRecord; readonly autoStart?: boolean }
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
 
 // Application lifetime cache, shared by retries and scene instances. Cancelled IO may warm it.
@@ -28,24 +29,30 @@ const resources = createResourcePreparation<HTMLImageElement>(resource => new Pr
 export class ThemeScene extends Phaser.Scene {
   private selection: Selection = {};
   private chosen: ThemePackage = builtinThemes[0]!;
+  private chosenSkin: SkinPackage = builtinSkins[0]!;
   private cancelPreparation: (() => void) | undefined;
   private alive = false;
   private preparing = false;
   private content: Phaser.GameObjects.Container | undefined;
   constructor() { super('themes'); }
-  init(selection: Selection): void { this.selection = selection; this.chosen = builtinThemes.find(theme => theme.id === selection.themeId) ?? builtinThemes[0]!; }
+  init(selection: Selection): void {
+    this.selection = selection; this.chosen = builtinThemes.find(theme => theme.id === selection.themeId) ?? builtinThemes[0]!;
+    this.chosenSkin = builtinSkins.find(skin => skin.id === selection.skinId) ?? builtinSkins[0]!;
+  }
   preload(): void {
     for (const theme of builtinThemes) if (!this.textures.exists(`preview:${theme.id}`)) this.load.image(`preview:${theme.id}`, `./themes/${theme.id}-preview.svg`);
+    for (const skin of builtinSkins) if (!this.textures.exists(`skin-preview:${skin.id}`)) this.load.image(`skin-preview:${skin.id}`, `./skins/${skin.id}-preview.svg`);
   }
   create(): void {
     this.alive = true; this.preparing = false;
     const canvas = this.game.canvas;
     for (const key of Object.keys(canvas.dataset)) delete canvas.dataset[key];
-    canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-label', '选择糖果乐园或玩具工厂主题，Enter 开始，Escape 取消准备');
+    canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-label', '左右选地图主题，上下选角色皮肤，Enter 开始，Escape 取消准备');
     const keyDown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
       if (event.code === 'Escape' && this.preparing) { event.preventDefault(); this.cancel(); }
       else if (!this.preparing && (event.code === 'ArrowLeft' || event.code === 'ArrowRight')) { event.preventDefault(); this.chosen = builtinThemes.find(theme => theme.id !== this.chosen.id)!; this.showSelection(); }
+      else if (!this.preparing && (event.code === 'ArrowUp' || event.code === 'ArrowDown')) { event.preventDefault(); this.chosenSkin = builtinSkins.find(skin => skin.id !== this.chosenSkin.id)!; this.showSelection(); }
       else if (event.code === 'Enter' && !this.preparing) { event.preventDefault(); this.prepare(); }
     };
     window.addEventListener('keydown', keyDown);
@@ -65,24 +72,33 @@ export class ThemeScene extends Phaser.Scene {
   private clear(phase: string): void {
     this.content?.destroy(true); this.content = this.add.container();
     delete this.game.canvas.dataset.error; delete this.game.canvas.dataset.preparation;
-    this.game.canvas.dataset.phase = phase; this.game.canvas.dataset.theme = this.chosen.id;
+    this.game.canvas.dataset.phase = phase; this.game.canvas.dataset.theme = this.chosen.id; this.game.canvas.dataset.skin = this.chosenSkin.id;
   }
   private showSelection(note = ''): void {
     this.clear('selecting');
-    this.text(512, 48, 'Fake Bomb It', 34);
-    this.text(512, 95, '选一个主题，开始这局', 24, '#b8d1c6');
+    this.text(512, 35, 'Fake Bomb It', 32);
+    this.text(512, 75, '选择地图主题和角色皮肤', 23, '#b8d1c6');
     builtinThemes.forEach((theme, index) => {
       const x = index === 0 ? 290 : 734;
       const selected = theme.id === this.chosen.id;
-      const panel = this.add.rectangle(x, 286, 396, 308, selected ? 0x24483f : 0x173737).setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      const panel = this.add.rectangle(x, 214, 396, 236, selected ? 0x24483f : 0x173737).setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
       panel.on('pointerup', () => { this.chosen = theme; this.showSelection(); }); this.content!.add(panel);
-      if (this.textures.exists(`preview:${theme.id}`)) this.content!.add(this.add.image(x, 246, `preview:${theme.id}`).setDisplaySize(320, 192));
-      this.text(x, 367, `${selected ? '● ' : ''}${theme.label}`, 25);
-      this.text(x, 405, index === 0 ? '奶油墙 · 威化障碍 · 巧克力炸弹' : '积木墙 · 纸箱障碍 · 金属炸弹', 18, '#b8d1c6');
+      if (this.textures.exists(`preview:${theme.id}`)) this.content!.add(this.add.image(x, 183, `preview:${theme.id}`).setDisplaySize(240, 144));
+      this.text(x, 280, `${selected ? '● ' : ''}${theme.label}`, 24);
+      this.text(x, 314, index === 0 ? '奶油墙 · 威化障碍 · 巧克力炸弹' : '积木墙 · 纸箱障碍 · 金属炸弹', 17, '#b8d1c6');
     });
-    this.button(512, 493, 330, `开始 · ${this.chosen.label}`, () => this.prepare());
-    this.text(512, 548, note || '← → 选择 · Enter 开始；两套主题使用相同玩法规则', 17, '#b8d1c6');
-    this.status(`${note ? `${note} ` : ''}当前主题：${this.chosen.label}。左右方向键切换，Enter 或点击开始。`);
+    this.text(512, 353, '角色皮肤 · ↑ ↓ 切换', 18, '#b8d1c6');
+    builtinSkins.forEach((skin, index) => {
+      const x = index === 0 ? 330 : 694, selected = skin.id === this.chosenSkin.id;
+      const panel = this.add.rectangle(x, 416, 320, 88, selected ? 0x24483f : 0x173737).setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      panel.on('pointerup', () => { this.chosenSkin = skin; this.showSelection(); }); this.content!.add(panel);
+      if (this.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.add.image(x - 96, 410, `skin-preview:${skin.id}`).setDisplaySize(78, 78));
+      this.text(x + 36, 401, skin.label, 24);
+      this.text(x + 36, 431, selected ? '已选择' : '点击选用', 17, selected ? '#83dfb6' : '#b8d1c6');
+    });
+    this.button(512, 501, 360, `开始 · ${this.chosenSkin.label}`, () => this.prepare());
+    this.text(512, 552, note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, '#b8d1c6');
+    this.status(`${note ? `${note} ` : ''}当前主题：${this.chosen.label}，皮肤：${this.chosenSkin.label}。左右选主题，上下选皮肤，Enter 或点击开始。`);
   }
   private cancel(): void {
     this.cancelPreparation?.(); this.cancelPreparation = undefined; this.preparing = false;
@@ -91,11 +107,11 @@ export class ThemeScene extends Phaser.Scene {
   private prepare(): void {
     if (this.preparing) return;
     this.preparing = true; this.clear('preparing');
-    this.text(512, 205, `正在准备${this.chosen.label}`, 32);
+    this.text(512, 205, `正在准备${this.chosen.label} · ${this.chosenSkin.label}`, 30);
     this.text(512, 276, '校验并加载画面资源，完成后才会开始计时。', 22, '#b8d1c6');
     this.button(512, 380, 260, '取消准备 · Esc', () => this.cancel());
     this.status('正在准备资源，可以取消；对局尚未创建。');
-    const source = diagnosticPackage(this.chosen);
+    const source = diagnosticPackage(withSkin(this.chosen, this.chosenSkin));
     const task = resources.start(source, theme => {
       for (const resource of theme.package.resources) {
         const image = theme.images[resource.id];
@@ -123,8 +139,12 @@ export class ThemeScene extends Phaser.Scene {
 
 function diagnosticPackage(theme: ThemePackage): ThemePackage {
   const mode = new URLSearchParams(location.search).get('resourceError');
-  if (mode !== 'required' && mode !== 'optional') return theme;
-  return { ...theme, resources: theme.resources.map(resource => resource.required === (mode === 'required') ? { ...resource, url: `./themes/missing-${resource.id}.svg` } : resource) };
+  if (mode !== 'required' && mode !== 'optional' && mode !== 'skin') return theme;
+  const resources = theme.resources.map(resource => (mode === 'skin' ? resource.id.startsWith('skin:') : resource.required === (mode === 'required'))
+    ? { ...resource, url: `./themes/missing-${resource.id}.svg` } : resource);
+  return { ...theme, resources,
+    ...(theme.skin ? { skin: { ...theme.skin, resources: theme.skin.resources.map(resource => resources.find(image => image.id === resource.id)!) } } : {}),
+  };
 }
 
 export function freshSeed(previous: string | null = null): string {

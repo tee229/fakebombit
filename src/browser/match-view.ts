@@ -5,6 +5,7 @@ import { interpolatePosition } from './interpolate-position.js';
 import { arenaLayout } from './layout.js';
 import { NormalBoard } from './normal-board.js';
 import type { ReadyTheme } from '../resources/index.js';
+import { createSkinPlayback, type ActorPose, type SkinPlayback } from '../resources/skin-playback.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
@@ -38,9 +39,13 @@ export class MatchView {
   private readonly changes: string[] = [];
   private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
+  private readonly skinPlayback: SkinPlayback<HTMLImageElement>;
+  private poses: readonly ActorPose<HTMLImageElement>[] = [];
+  private animationPaused = false;
 
   constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly theme: ReadyTheme<HTMLImageElement>, private readonly arena: 'generated' | 'training' | 'items' | 'escape' | 'normal' = 'training') {
     this.current = { world, alpha: 0 };
+    this.skinPlayback = createSkinPlayback(theme);
     this.root = scene.add.container();
     this.graphics = scene.add.graphics();
     this.root.add(this.graphics);
@@ -85,7 +90,9 @@ export class MatchView {
     this.present(world, 0, []);
   }
 
-  present(world: WorldState, alpha: number, events: readonly GameplayEvent[]): void {
+  present(world: WorldState, alpha: number, events: readonly GameplayEvent[], deltaMs = 0, animationPaused = false): void {
+    this.animationPaused = animationPaused;
+    this.poses = this.skinPlayback.present(world, deltaMs, animationPaused);
     for (const event of events) {
       if (event.tick < this.cursor.tick || (event.tick === this.cursor.tick && event.order <= this.cursor.order)) continue;
       this.cursor = { tick: event.tick, order: event.order };
@@ -151,7 +158,7 @@ export class MatchView {
       if (player) g.fillPoints([{ x, y: y - 22 }, { x: x + 22, y }, { x, y: y + 22 }, { x: x - 22, y }], true);
       else g.fillCircle(x, y, 20);
       if (actor.ai) g.lineStyle(2, colors.player).strokeCircle(x, y, 23);
-      label.setPosition(x, y + (this.mode === 'normal' ? 19 : 0));
+      label.setPosition(x, y + (this.mode === 'normal' ? 21 : 0));
     }
     // The legend uses the same geometric grammar, never texture-derived gameplay facts.
     const legend = this.graphics.clear();
@@ -173,16 +180,18 @@ export class MatchView {
     this.scene.game.canvas.dataset.consumedEvents = String(this.consumedEvents);
     this.current = { world, alpha };
     this.boardGraphics.setVisible(this.mode === 'entities');
-    this.normalBoard?.present(world, alpha);
+    this.normalBoard?.present(world, alpha, this.poses, animationPaused);
+    if (!this.normalBoard) delete this.scene.game.canvas.dataset.actorAnimations;
     this.scene.game.canvas.dataset.view = this.mode;
     this.scene.game.canvas.dataset.theme = this.theme.id;
+    this.scene.game.canvas.dataset.skin = this.theme.package.skin?.id ?? '';
   }
 
   toggleMode(): void {
     this.mode = this.mode === 'normal' ? 'entities' : 'normal';
     this.normalBoard?.destroy();
     this.normalBoard = this.mode === 'normal' ? new NormalBoard(this.scene, this.boardRoot, this.theme) : undefined;
-    this.present(this.current.world, this.current.alpha, []);
+    this.present(this.current.world, this.current.alpha, [], 0, this.animationPaused);
   }
 
   destroy(): void { this.root.destroy(true); }

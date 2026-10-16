@@ -1,16 +1,19 @@
 import Phaser from 'phaser';
 import type { WorldState } from '../match/index.js';
 import { resolveVisual, visualSlotFor, type ReadyTheme, type VisualSlot } from '../resources/index.js';
-import { interpolatePosition } from './interpolate-position.js';
+import type { ActorPose } from '../resources/skin-playback.js';
+import { ActorSprites } from './actor-sprites.js';
 
 /** Synchronizes current facts only. Animation time cannot create or prolong gameplay objects. */
 export class NormalBoard {
   private readonly root: Phaser.GameObjects.Container;
   private readonly images = new Map<string, Phaser.GameObjects.Image>();
+  private readonly actors: ActorSprites;
   constructor(private readonly scene: Phaser.Scene, parent: Phaser.GameObjects.Container, private readonly theme: ReadyTheme<HTMLImageElement>) {
     this.root = scene.add.container(); parent.addAt(this.root, 1);
+    this.actors = new ActorSprites(scene, this.root);
   }
-  present(world: WorldState, alpha: number): void {
+  present(world: WorldState, alpha: number, poses: readonly ActorPose<HTMLImageElement>[], paused: boolean): void {
     const live = new Set<string>();
     const rate = world.initialization.rules.tickRate;
     const draw = (id: string, slot: VisualSlot, x: number, y: number, depth: number, age = 0, opacity = 1) => {
@@ -33,10 +36,7 @@ export class NormalBoard {
     for (const item of world.items) draw(`item:${item.id}`, visualSlotFor(item.type), item.x + 0.5, item.y + 0.5, 4, 0, item.active ? 1 : 0.4);
     for (const bomb of world.bombs) draw(`bomb:${bomb.id}`, visualSlotFor('bomb'), bomb.x + 0.5, bomb.y + 0.5, 5, (world.tick - bomb.placedAtTick) / rate);
     for (const hazard of world.hazards) for (const cell of hazard.cells) draw(`fire:${hazard.id}:${cell.x}:${cell.y}`, visualSlotFor('fire'), cell.x + 0.5, cell.y + 0.5, 6, (world.tick - hazard.createdAtTick) / rate);
-    for (const actor of world.actors) if (actor.alive) {
-      const position = interpolatePosition(actor, world.result ? 1 : alpha);
-      draw(`actor:${actor.id}`, visualSlotFor(actor.id === world.initialization.playerId ? 'player' : 'opponent'), position.x, position.y, 7);
-    }
+    this.actors.present(world, alpha, poses, paused);
     for (const [id, image] of this.images) if (!live.has(id)) { image.destroy(); this.images.delete(id); }
     this.root.sort('depth');
   }

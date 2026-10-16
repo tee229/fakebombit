@@ -20,9 +20,26 @@ export interface ThemePackage {
   readonly format: 'builtin-theme-v1'; readonly id: string; readonly label: string;
   readonly resources: readonly ThemeResource[];
   readonly slots: Readonly<Partial<Record<VisualSlot, VisualDefinition>>>;
+  readonly skin?: SkinPackage;
+}
+export const skinActions = ['idle', 'move', 'eliminated'] as const;
+export const skinDirections = ['up', 'right', 'down', 'left'] as const;
+export type SkinAction = typeof skinActions[number];
+export type SkinDirection = typeof skinDirections[number];
+export interface SkinClip extends VisualDefinition { readonly flipX: boolean }
+export interface SkinPackage {
+  readonly format: 'builtin-skin-v1'; readonly id: string; readonly label: string;
+  readonly resources: readonly ThemeResource[];
+  readonly animations: Readonly<Record<SkinAction, Readonly<Record<SkinDirection, SkinClip>>>>;
+}
+export function withSkin(theme: ThemePackage, skin: SkinPackage): ThemePackage {
+  return { ...theme, resources: [...theme.resources, ...skin.resources], skin };
 }
 export interface LoadedImage<T> { readonly value: T; readonly width: number; readonly height: number }
 export interface PreparedImage<T> extends LoadedImage<T> { readonly key: string }
+function imageKey(resource: ThemeResource): string {
+  return JSON.stringify([resource.url, resource.width, resource.height, resource.frameWidth, resource.frameHeight]);
+}
 export interface ResourceDiagnostic { readonly resource: string; readonly message: string }
 export interface ReadyTheme<T> {
   readonly id: string; readonly package: ThemePackage;
@@ -41,6 +58,18 @@ export function resolveVisual<T>(ready: ReadyTheme<T>, slot: VisualSlot, elapsed
   const index = definition.loop ? elapsedFrame % definition.frames.length : Math.min(elapsedFrame, definition.frames.length - 1);
   return { image, frame: definition.frames[index]!, referenceSize: definition.referenceSize, anchor: definition.anchor, offset: definition.offset, facing: definition.facing };
 }
+/** Presentation-only sampling; Phaser uses this same clip for actual Sprite playback. */
+export function resolveSkinAnimation<T>(ready: ReadyTheme<T>, action: SkinAction, direction: SkinDirection, elapsedSeconds = 0) {
+  const definition = ready.package.skin?.animations[action][direction];
+  const image = definition && ready.images[definition.resource];
+  if (!definition || !image) return null;
+  if (!Number.isFinite(elapsedSeconds) || elapsedSeconds < 0) throw new RangeError('Visual time must be finite and nonnegative');
+  const elapsedFrame = Math.floor(elapsedSeconds * definition.framesPerSecond);
+  const index = definition.loop ? elapsedFrame % definition.frames.length : Math.min(elapsedFrame, definition.frames.length - 1);
+  return { image, frame: definition.frames[index]!, frameIndex: index, frames: definition.frames, framesPerSecond: definition.framesPerSecond,
+    loop: definition.loop, flipX: definition.flipX, referenceSize: definition.referenceSize, anchor: definition.anchor, offset: definition.offset,
+    finished: !definition.loop && elapsedFrame >= definition.frames.length };
+}
 export type PreparationResult<M> = { readonly status: 'ready'; readonly value: M } | { readonly status: 'failed'; readonly error: ResourceError } | { readonly status: 'cancelled' };
 
 /** Application-owned resources; gameplay creation is a synchronous commit after preparation. */
@@ -49,7 +78,7 @@ export function createResourcePreparation<T>(load: (resource: ThemeResource) => 
   let cancelPrevious: (() => void) | undefined;
   const cache = new Map<string, Promise<PreparedImage<T>>>();
   const cachedImage = (resource: ThemeResource): Promise<PreparedImage<T>> => {
-    const key = JSON.stringify([resource.url, resource.width, resource.height, resource.frameWidth, resource.frameHeight]);
+    const key = imageKey(resource);
     const previous = cache.get(key);
     if (previous) return previous;
     const pending = load(resource).then(image => {
@@ -102,6 +131,40 @@ function imageDefinition(value: unknown): value is ThemeResource {
     && dimension(value.width) && dimension(value.height) && dimension(value.frameWidth) && dimension(value.frameHeight)
     && value.width % value.frameWidth === 0 && value.height % value.frameHeight === 0;
 }
+function visualDefinition(value: unknown, resources: readonly ThemeResource[]): value is VisualDefinition {
+  if (!record(value)) return false;
+  const resource = resources.find(image => image.id === value.resource);
+  return !!resource && Array.isArray(value.frames) && value.frames.length > 0
+    && value.frames.every((frame: unknown) => typeof frame === 'number' && Number.isSafeInteger(frame) && frame >= 0 && frame < resource.width / resource.frameWidth * (resource.height / resource.frameHeight))
+    && typeof value.framesPerSecond === 'number' && Number.isFinite(value.framesPerSecond) && value.framesPerSecond >= 0 && (value.frames.length === 1 || value.framesPerSecond > 0)
+    && typeof value.loop === 'boolean' && value.facing === 'none'
+    && record(value.referenceSize) && positive(value.referenceSize.width) && positive(value.referenceSize.height)
+    && point(value.anchor) && value.anchor.x >= 0 && value.anchor.x <= 1 && value.anchor.y >= 0 && value.anchor.y <= 1 && point(value.offset);
+}
+function copyVisual<T extends VisualDefinition>(definition: T): T {
+  return { ...definition, frames: [...definition.frames], referenceSize: { ...definition.referenceSize }, anchor: { ...definition.anchor }, offset: { ...definition.offset } };
+}
+function validateSkin(skin: SkinPackage, resources: readonly ThemeResource[]): SkinPackage {
+  if (!record(skin) || skin.format !== 'builtin-skin-v1' || !nonempty(skin.id) || !nonempty(skin.label)
+    || !Array.isArray(skin.resources) || skin.resources.length === 0 || !record(skin.animations)
+    || skin.resources.some(resource => !imageDefinition(resource) || !resource.required || !resources.some(image => image.id === resource.id && image.required && imageKey(image) === imageKey(resource)))) {
+    throw new ResourceError('invalid-package', 'Invalid required skin package');
+  }
+  const animations = {} as Record<SkinAction, Record<SkinDirection, SkinClip>>;
+  for (const action of skinActions) {
+    const directions = skin.animations[action];
+    if (!record(directions)) throw new ResourceError('invalid-package', `Missing skin action: ${action}`);
+    const clips = {} as Record<SkinDirection, SkinClip>;
+    for (const direction of skinDirections) {
+      const clip = directions[direction];
+      if (!visualDefinition(clip, skin.resources) || typeof clip.flipX !== 'boolean' || clip.framesPerSecond <= 0
+        || clip.loop !== (action !== 'eliminated')) throw new ResourceError('invalid-package', `Invalid skin animation: ${action}.${direction}`);
+      clips[direction] = copyVisual(clip);
+    }
+    animations[action] = clips;
+  }
+  return { format: 'builtin-skin-v1', id: skin.id, label: skin.label, resources: skin.resources.map(resource => ({ ...resource })), animations };
+}
 
 function validateTheme(source: ThemePackage): { theme: ThemePackage; diagnostics: ResourceDiagnostic[] } {
   if (!record(source) || source.format !== 'builtin-theme-v1' || !nonempty(source.id) || !nonempty(source.label)
@@ -122,20 +185,15 @@ function validateTheme(source: ThemePackage): { theme: ThemePackage; diagnostics
     const definition = source.slots[slot];
     if (!definition) continue;
     const resource = resources.find(image => image.id === definition.resource);
-    const valid = resource && record(definition) && Array.isArray(definition.frames) && definition.frames.length > 0
-      && definition.frames.every(frame => Number.isSafeInteger(frame) && frame >= 0 && frame < resource.width / resource.frameWidth * (resource.height / resource.frameHeight))
-      && Number.isFinite(definition.framesPerSecond) && definition.framesPerSecond >= 0 && (definition.frames.length === 1 || definition.framesPerSecond > 0)
-      && typeof definition.loop === 'boolean' && definition.facing === 'none'
-      && record(definition.referenceSize) && positive(definition.referenceSize.width) && positive(definition.referenceSize.height)
-      && point(definition.anchor) && definition.anchor.x >= 0 && definition.anchor.x <= 1 && definition.anchor.y >= 0 && definition.anchor.y <= 1 && point(definition.offset)
-      && (slot === 'decoration.accent' || resource.required);
+    const valid = resource && visualDefinition(definition, resources) && (slot === 'decoration.accent' || resource.required);
     if (!valid) {
       if (slot === 'decoration.accent') { diagnostics.push({ resource: String(definition.resource), message: `${slot}: invalid optional visual; omitted` }); continue; }
       throw new ResourceError('invalid-package', `${slot}: invalid required visual definition`);
     }
-    slots[slot] = { ...definition, frames: [...definition.frames], referenceSize: { ...definition.referenceSize }, anchor: { ...definition.anchor }, offset: { ...definition.offset } };
+    slots[slot] = copyVisual(definition);
   }
-  return { theme: immutable({ format: 'builtin-theme-v1', id: source.id, label: source.label, resources, slots }), diagnostics };
+  return { theme: immutable({ format: 'builtin-theme-v1', id: source.id, label: source.label, resources, slots,
+    ...(source.skin !== undefined ? { skin: validateSkin(source.skin, resources) } : {}) }), diagnostics };
 }
 
 function immutable<T>(value: T): T {

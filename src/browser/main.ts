@@ -112,7 +112,7 @@ class TrainingScene extends Phaser.Scene {
   }
 
   private retry(): void {
-    this.scene.start('themes', { themeId: this.prepared.theme.id, initialization: this.initialization, autoStart: true });
+    this.scene.start('themes', { themeId: this.prepared.theme.id, skinId: this.prepared.theme.package.skin?.id, initialization: this.initialization, autoStart: true });
   }
 
   private newMatch(): void {
@@ -121,7 +121,7 @@ class TrainingScene extends Phaser.Scene {
     url.searchParams.delete('arena');
     window.history.replaceState(null, '', url);
     this.initialization = undefined;
-    this.scene.start('themes', { themeId: this.prepared.theme.id });
+    this.scene.start('themes', { themeId: this.prepared.theme.id, skinId: this.prepared.theme.package.skin?.id });
   }
 
   private pause(reason: PauseReason): void {
@@ -147,7 +147,8 @@ class TrainingScene extends Phaser.Scene {
   update(): void {
     if (!this.session || !this.view || !this.inputState) return;
     const frame = this.session.advanceFrame(this.game.loop.rawDelta);
-    this.view.present(frame.world, frame.alpha, frame.events);
+    const animationPaused = frame.phase === 'paused' || document.visibilityState === 'hidden';
+    this.view.present(frame.world, frame.alpha, frame.events, Math.min(100, this.game.loop.rawDelta), animationPaused);
     this.phase = frame.phase;
     const touch = this.inputState.readTouch();
     this.controls?.present(frame, touch);
