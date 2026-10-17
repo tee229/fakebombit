@@ -98,7 +98,7 @@ export class AcceptancePanel {
       device: { model: this.value('#acceptance-device'), os: this.value('#acceptance-os'), browser: this.value('#acceptance-browser'),
         version: this.value('#acceptance-version'), userAgent: navigator.userAgent, screen: [screen.width, screen.height],
         viewport: [innerWidth, innerHeight], pixelRatio: devicePixelRatio, maxTouchPoints: navigator.maxTouchPoints },
-      criteria: { continuousMs: 60000, minimumAverageFps: 55, maximumP95FrameMs: 33, maximumFrameMs: 200, p95ResolutionMs: .1 },
+      criteria: { continuousMs: 60000, segmentSelection: 'longest-continuous', minimumAverageFps: 55, maximumP95FrameMs: 33, maximumFrameMs: 200, p95ResolutionMs: .1 },
       manualChecks: Object.fromEntries(checks.map(([id]) => [id, this.root.querySelector<HTMLInputElement>(`input[name="${id}"]`)!.checked])),
       notes: this.value('#acceptance-notes'), errors: [...this.errors], resources,
       runs: this.runs.map(run => ({ id: run.id, ended: run.ended, ...run.metadata, performance: run.metrics.read() })),
@@ -107,7 +107,8 @@ export class AcceptancePanel {
   }
   private refresh(): void {
     const run = this.runs.at(-1), latest = run?.metrics.read();
-    this.status.textContent = latest ? `${run?.metadata.eligibleSetup ? '最近一局' : '非正式配置，仅诊断'}：连续 ${(latest.longestSegmentMs / 1000).toFixed(1)}秒；平均 ${latest.averageFps?.toFixed(1) ?? '—'} FPS；P95 ${latest.p95FrameMs?.toFixed(1) ?? '—'} ms；${({ insufficient: '时长不足，继续测量', pass: '性能样本达标，仍需真机检查', fail: '存在性能问题，请发回报告' })[latest.verdict]}` : '尚无对局记录。先返回游戏，选择外观并开始正式对局。';
+    const qualification = latest?.qualification;
+    this.status.textContent = latest && qualification ? `${run?.metadata.eligibleSetup ? '最近一局' : '非正式配置，仅诊断'}：最长连续片段 ${(qualification.foregroundMs / 1000).toFixed(1)}秒；平均 ${qualification.averageFps?.toFixed(1) ?? '—'} FPS；P95 ${qualification.p95FrameMs?.toFixed(1) ?? '—'} ms；${({ insufficient: '时长不足，继续测量', pass: '性能样本达标，仍需真机检查', fail: '存在性能问题，请发回报告' })[latest.verdict]}` : '尚无对局记录。先返回游戏，选择外观并开始正式对局。';
     this.report.value = JSON.stringify(this.snapshot(), null, 2);
     this.root.querySelector<HTMLButtonElement>('#acceptance-download')!.disabled = this.runs.length === 0;
   }

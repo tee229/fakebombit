@@ -43,6 +43,23 @@ test('budget peaks, dropped game time and invalid values are reported without al
   expect(frame.counters.particles).toBe(20);
 });
 
+test('a faster short segment cannot turn a failing continuous minute into a pass', () => {
+  const record = createPerformanceRecord(); record.sample(frame);
+  for (let i = 0; i < 3241; i++) record.sample({ ...frame, intervalMs: 1000 / 54 });
+  expect(record.read().verdict).toBe('fail');
+  record.sample({ ...frame, active: false }); record.sample(frame);
+  for (let i = 0; i < 1201; i++) record.sample({ ...frame, intervalMs: 1000 / 60 });
+  expect(record.read().averageFps).toBeGreaterThan(55);
+  expect(record.read().verdict).toBe('fail');
+  expect(record.read().qualification.averageFps).toBeCloseTo(54);
+  record.sample({ ...frame, active: false });
+  expect(record.read().qualification.averageFps).toBeCloseTo(54);
+  record.sample(frame);
+  for (let i = 0; i < 3602; i++) record.sample({ ...frame, intervalMs: 1000 / 60 });
+  expect(record.read().qualification.averageFps).toBeCloseTo(60);
+  expect(record.read().verdict).toBe('pass');
+});
+
 test('percentiles use nearest rank rounded up to 0.1 ms, and zero intervals do not inflate FPS', () => {
   const record = createPerformanceRecord(); record.sample(frame);
   for (let i = 0; i < 19; i++) record.sample({ ...frame, intervalMs: 16.01 });
