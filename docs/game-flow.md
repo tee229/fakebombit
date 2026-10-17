@@ -22,4 +22,4 @@ Background pause clears input and freezes the session; background entry while pr
 
 Canvas buttons cover theme/skin choice, preparation cancellation, failure recovery, pause/resume, result, retry, new match and return. Keyboard equivalents: Enter to start/resume, Escape to cancel preparation or pause, P to pause, R to retry, N for a new seed, M to return, V to switch view. HUD abilities remain in side cards and time above the board.
 
-Tests use the user-confirmed public flow and resource preparation interfaces, with real matches/sessions/input and injected image IO/presentation adapters. See [validation](validation/issue-14-game-flow.md). Audio lifecycle hooks exist; sound assets and physical-device coverage belong to later tasks.
+Tests use the user-confirmed public flow and resource preparation interfaces, with real matches/sessions/input and injected image IO/presentation adapters. See [validation](validation/issue-14-game-flow.md). Issue #15 connects [event feedback and sound assets](feedback.md) to these lifecycle hooks; physical-device coverage remains #16.

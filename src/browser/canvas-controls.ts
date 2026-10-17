@@ -3,8 +3,9 @@ import type { PlayerInput, TouchState } from '../input/player.js';
 import type { GameFrame } from '../game-flow/session.js';
 import type { Position } from '../match/index.js';
 import { arenaLayout as layout } from './layout.js';
+import { feedbackLabels, cycleVolume, cycleParticles } from './feedback-settings.js';
 
-type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry' | 'newMatch' | 'menu';
+type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry' | 'newMatch' | 'menu' | 'volume' | 'particles';
 type PointerEventName = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture';
 type Commands = { pause(): void; resume(): void; retry(): void; newMatch(): void; menu(): void };
 const ink = 0xeaf3ed, accent = 0x83dfb6, surface = 0x173737;
@@ -16,6 +17,8 @@ export class CanvasControls {
   private readonly pauseLabel: Phaser.GameObjects.Text;
   private readonly pauseMessage: Phaser.GameObjects.Text;
   private readonly pauseLabels: Phaser.GameObjects.Text[];
+  private readonly volumeLabel: Phaser.GameObjects.Text;
+  private readonly particlesLabel: Phaser.GameObjects.Text;
   private readonly pointers = new Map<number, Control>();
   private phase: GameFrame['phase'] = 'playing';
   private readonly canvas: HTMLCanvasElement;
@@ -38,6 +41,9 @@ export class CanvasControls {
     this.pauseMessage = label(512, 298, '点击继续，重新操作', 22);
     const resumeLabel = label(layout.resume.x, layout.resume.y, '继续游戏', 28).setColor('#102b2c');
     this.pauseLabels = [pauseTitle, this.pauseMessage, resumeLabel];
+    this.volumeLabel = label(layout.volume.x, layout.volume.y, '', 20);
+    this.particlesLabel = label(layout.particles.x, layout.particles.y, '', 20);
+    this.pauseLabels.push(this.volumeLabel, this.particlesLabel);
     this.listeners = [
       ['pointerdown', event => this.down(event)],
       ['pointermove', event => this.move(event)],
@@ -76,6 +82,11 @@ export class CanvasControls {
       const button = layout.resume;
       g.fillStyle(accent).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       this.pauseMessage.setText(frame.pauseReason === 'background' ? '离开页面已暂停，返回后手动继续' : '点击继续，重新操作');
+      const labels = feedbackLabels(); this.volumeLabel.setText(labels.volume); this.particlesLabel.setText(labels.particles);
+      for (const control of [layout.volume, layout.particles]) {
+        g.fillStyle(surface).fillRoundedRect(control.x - control.width / 2, control.y - control.height / 2, control.width, control.height, 6);
+        g.lineStyle(2, 0x79958c).strokeRoundedRect(control.x - control.width / 2, control.y - control.height / 2, control.width, control.height, 6);
+      }
     }
   }
 
@@ -105,7 +116,7 @@ export class CanvasControls {
   private down(event: PointerEvent): void {
     if (event.button !== 0 || this.pointers.has(event.pointerId)) return;
     const point = this.position(event);
-    const available: Control[] = this.phase === 'paused' ? ['resume', 'retry', 'newMatch', 'menu'] : this.phase === 'ended' ? ['retry', 'newMatch', 'menu'] : ['pause', 'retry', 'newMatch', 'menu', 'joystick', 'bomb'];
+    const available: Control[] = this.phase === 'paused' ? ['resume', 'retry', 'newMatch', 'menu', 'volume', 'particles'] : this.phase === 'ended' ? ['retry', 'newMatch', 'menu'] : ['pause', 'retry', 'newMatch', 'menu', 'joystick', 'bomb'];
     const control = available.find(item => this.inside(item, point));
     if (!control) return;
     if ((control === 'joystick' || control === 'bomb') && !this.input.pointerDown(event.pointerId, control, this.offset(point))) return;
@@ -125,7 +136,10 @@ export class CanvasControls {
     this.input.pointerUp(event.pointerId);
     if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
     event.preventDefault();
-    if (control !== 'joystick' && control !== 'bomb' && this.inside(control, this.position(event))) this.commands[control]();
+    if (!this.inside(control, this.position(event))) return;
+    if (control === 'volume') cycleVolume();
+    else if (control === 'particles') cycleParticles();
+    else if (control !== 'joystick' && control !== 'bomb') this.commands[control]();
   }
   private cancel(event: PointerEvent): void {
     if (!this.pointers.has(event.pointerId)) return;

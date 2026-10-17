@@ -8,6 +8,10 @@ import type { ReadyTheme } from '../resources/index.js';
 import { createSkinPlayback, type ActorPose, type SkinPlayback } from '../resources/skin-playback.js';
 import { ActorCards } from './actor-cards.js';
 import { actorIdentity } from './actor-identity.js';
+import { createFeedback } from '../presentation/feedback.js';
+import { FeedbackAudio } from './feedback-audio.js';
+import { readFeedbackSettings } from './feedback-settings.js';
+import { drawFeedback } from './feedback-drawing.js';
 
 const colors = {
   background: 0x102b2c, floor: 0x173737, grid: 0x2b4c48, wall: 0x496562, wallEdge: 0x79958c,
@@ -37,8 +41,11 @@ export class MatchView {
   private readonly result: Phaser.GameObjects.Container;
   private readonly resultTitle: Phaser.GameObjects.Text;
   private latestChange = '';
-  private cursor = { tick: -1, order: -1 };
   private consumedEvents = 0;
+  private readonly feedback: ReturnType<typeof createFeedback>;
+  private readonly audio: FeedbackAudio;
+  private readonly feedbackGraphics: Phaser.GameObjects.Graphics;
+  private volume = -1;
   private readonly skinPlayback: SkinPlayback<HTMLImageElement>;
   private poses: readonly ActorPose<HTMLImageElement>[] = [];
   private animationPaused = false;
@@ -46,6 +53,8 @@ export class MatchView {
   constructor(private readonly scene: Phaser.Scene, world: WorldState, private readonly theme: ReadyTheme<HTMLImageElement>, private readonly arena: 'generated' | 'training' | 'items' | 'escape' | 'normal' = 'training') {
     this.current = { world, alpha: 0 };
     this.skinPlayback = createSkinPlayback(theme);
+    this.feedback = createFeedback(world, readFeedbackSettings());
+    this.audio = new FeedbackAudio(scene, theme.id);
     this.root = scene.add.container();
     const area = arenaLayout.board;
     const cell = Math.min(area.cell, area.width / world.initialMap.width, area.height / world.initialMap.height);
@@ -54,6 +63,7 @@ export class MatchView {
     this.boardGraphics = scene.add.graphics();
     this.boardRoot.add(this.boardGraphics); this.root.add(this.boardRoot);
     this.normalBoard = new NormalBoard(scene, this.boardRoot, theme);
+    this.feedbackGraphics = scene.add.graphics(); this.boardRoot.add(this.feedbackGraphics);
     this.actorCards = new ActorCards(scene, this.root, world, theme);
     this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
     const arenaTitles = { generated: '种子地图', normal: '正常 AI 练习场', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
@@ -78,9 +88,11 @@ export class MatchView {
   present(world: WorldState, alpha: number, events: readonly GameplayEvent[], deltaMs = 0, animationPaused = false): void {
     this.animationPaused = animationPaused;
     this.poses = this.skinPlayback.present(world, deltaMs, animationPaused);
-    for (const event of events) {
-      if (event.tick < this.cursor.tick || (event.tick === this.cursor.tick && event.order <= this.cursor.order)) continue;
-      this.cursor = { tick: event.tick, order: event.order };
+    const settings = readFeedbackSettings(); this.feedback.configure(settings);
+    const feedback = this.feedback.present(world, events, deltaMs, { paused: animationPaused, visible: this.mode === 'normal' });
+    if (animationPaused || this.mode === 'entities' || this.volume !== settings.volume) this.audio.stop();
+    this.volume = settings.volume; this.audio.play(feedback.sounds);
+    for (const event of feedback.events) {
       this.consumedEvents += 1;
       const seconds = (event.tick / world.initialization.rules.tickRate).toFixed(1);
       const descriptions: Record<GameplayEvent['type'], string> = {
@@ -141,7 +153,7 @@ export class MatchView {
       else g.fillCircle(x, y, 20);
       if (actor.ai) g.lineStyle(2, colors.player).strokeCircle(x, y, 23);
     }
-    this.actorCards.present(world);
+    this.actorCards.present(world, feedback.effects);
     const opponents = world.actors.filter(actor => actor.id !== world.initialization.playerId);
     const ai = opponents.find(actor => actor.ai)?.ai;
     this.progress.setText(ai && this.arena === 'escape' ? `AI：${aiLabels[ai.status]}` : `${this.arena === 'generated' ? '对手' : '目标'}剩余  ${opponents.filter(actor => actor.alive).length} / ${opponents.length}`);
@@ -153,10 +165,17 @@ export class MatchView {
     this.current = { world, alpha };
     this.boardGraphics.setVisible(this.mode === 'entities');
     this.normalBoard?.present(world, alpha, this.poses, animationPaused);
+    if (this.mode === 'normal') drawFeedback(this.feedbackGraphics, feedback.effects, feedback.danger, this.theme.id, settings.reducedMotion);
+    else this.feedbackGraphics.clear();
     if (!this.normalBoard) delete this.scene.game.canvas.dataset.actorAnimations;
     this.scene.game.canvas.dataset.view = this.mode;
     this.scene.game.canvas.dataset.theme = this.theme.id;
     this.scene.game.canvas.dataset.skin = this.theme.package.skin?.id ?? '';
+    this.scene.game.canvas.dataset.feedbackEffects = JSON.stringify(feedback.effects);
+    this.scene.game.canvas.dataset.feedbackDanger = JSON.stringify(feedback.danger);
+    this.scene.game.canvas.dataset.feedbackParticles = String(feedback.effects.reduce((sum, effect) => sum + effect.particles, 0));
+    this.scene.game.canvas.dataset.feedbackAudio = JSON.stringify(this.audio.read());
+    this.scene.game.canvas.dataset.feedbackSettings = JSON.stringify(settings);
   }
 
   toggleMode(): void {
@@ -166,7 +185,8 @@ export class MatchView {
     this.present(this.current.world, this.current.alpha, [], 0, this.animationPaused);
   }
 
-  destroy(): void { this.root.destroy(true); }
+  stopAudio(): void { this.audio.stop(); }
+  destroy(): void { this.feedback.dispose(); this.audio.dispose(); this.root.destroy(true); }
 
   private drawItem(g: Phaser.GameObjects.Graphics, kind: ItemKind, x: number, y: number, alpha = 1): void {
     g.fillStyle(colors.background, alpha).fillRoundedRect(x - 13, y - 10, 26, 20, 3);

@@ -9,4 +9,6 @@ export const arenaLayout = {
   retry: { x: 900, y: 514, width: 160, height: 80 },
   newMatch: { x: 118, y: 514, width: 184, height: 64 },
   resume: { x: 512, y: 356, width: 268, height: 88 },
+  volume: { x: 386, y: 446, width: 230, height: 58 },
+  particles: { x: 638, y: 446, width: 230, height: 58 },
 } as const;

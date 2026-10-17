@@ -10,6 +10,7 @@ import { ThemeMenu, preloadMenu } from './theme-scene.js';
 import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
+import { preloadFeedbackAudio } from './feedback-audio.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
@@ -19,7 +20,7 @@ class GameScene extends Phaser.Scene {
   private arena: Arena = 'generated';
   private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
-  preload(): void { preloadMenu(this); }
+  preload(): void { preloadMenu(this); preloadFeedbackAudio(this); }
   create(): void {
     this.flow = createGameFlow({ resources, selection: diagnosticPackage(withSkin(builtinThemes[0]!, builtinSkins[0]!)),
       makeMatch: (theme, initialization) => { installTextures(this, theme); const setup = makeMatch(initialization); this.arena = setup.arena; return setup.match; },
@@ -98,7 +99,7 @@ class GameScene extends Phaser.Scene {
       canvas.setAttribute('aria-label', `${labels[this.arena]}。种子：${world.initialization.seed}。R 重试，N 新开，M 返回菜单。`);
       this.status('本局已开始。摇杆或方向键移动，空格放弹；P 暂停，R 重试，N 新开，M 返回菜单。');
       return { dispose,
-        pause: () => { controls?.clear(); this.sound.pauseAll(); this.status('对局已暂停。返回页面后，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
+        pause: () => { controls?.clear(); view?.stopAudio(); this.sound.pauseAll(); this.status('对局已暂停。可调音量和粒子，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
         resume: () => { controls?.clear(); this.sound.resumeAll(); this.status('已继续。重新操作摇杆或方向键移动。'); },
       };
     } catch (error) { dispose(); throw error; }
@@ -136,6 +137,7 @@ class GameScene extends Phaser.Scene {
     canvas.dataset.flowPhase = state.phase; canvas.dataset.runId = String(run?.id ?? '');
     canvas.dataset.runListeners = String(this.live?.listenerCount() ?? 0);
     canvas.dataset.sceneObjects = String(this.children.list.length); canvas.dataset.textures = String(this.textures.getTextureKeys().length);
+    canvas.dataset.soundInstances = String(this.sound.getAll('').length);
   }
 }
 
@@ -145,6 +147,6 @@ const renderFps = [30, 60, 120].includes(requestedFps) ? requestedFps : 60;
 const game = new Phaser.Game({
   type: Phaser.AUTO, parent: 'game', backgroundColor: '#102b2c', width: arenaLayout.width, height: arenaLayout.height,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  fps: { target: renderFps, forceSetTimeOut: fpsParameter !== null, smoothStep: false }, scene: [GameScene], audio: { noAudio: true },
+  fps: { target: renderFps, forceSetTimeOut: fpsParameter !== null, smoothStep: false }, scene: [GameScene],
 });
 if (import.meta.hot) import.meta.hot.dispose(() => game.destroy(true));

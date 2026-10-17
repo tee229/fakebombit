@@ -4,6 +4,7 @@ import { builtinThemes } from '../resources/builtin-themes.js';
 import { builtinSkins } from '../resources/builtin-skins.js';
 import type { GameFlow, GameFlowState } from '../game-flow/index.js';
 import { diagnosticPackage } from './app-resources.js';
+import { readFeedbackSettings, feedbackLabels, cycleParticles, cycleVolume } from './feedback-settings.js';
 
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
 
@@ -50,7 +51,7 @@ export class ThemeMenu {
   hide(): void { this.content?.destroy(true); this.content = undefined; this.rendered = ''; this.note = ''; }
   present(state: GameFlowState<HTMLImageElement>): void {
     if (state.run || state.phase === 'disposed') { if (this.content) this.hide(); return; }
-    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note]);
+    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings()]);
     if (key === this.rendered) return;
     this.content?.destroy(true); this.content = this.scene.add.container(); this.rendered = key;
     const canvas = this.scene.game.canvas;
@@ -93,6 +94,9 @@ export class ThemeMenu {
       this.text(x + 36, 401, skin.label, 24); this.text(x + 36, 431, selected ? '已选择' : '点击选用', 17, selected ? '#83dfb6' : '#b8d1c6');
     });
     this.button(512, 501, 360, `开始 · ${this.skin().label}`, () => { void this.flow.start(); });
+    const settings = feedbackLabels();
+    this.button(166, 501, 232, settings.volume, cycleVolume);
+    this.button(858, 501, 232, settings.particles, cycleParticles);
     this.text(512, 552, this.note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, '#b8d1c6');
     this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。左右选主题，上下选皮肤，Enter 或点击开始。`);
   }

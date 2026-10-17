@@ -3,6 +3,7 @@ import type { WorldState } from '../match/index.js';
 import { resolveSkinAnimation, type ReadyTheme } from '../resources/index.js';
 import { actorIdentity } from './actor-identity.js';
 import { arenaLayout } from './layout.js';
+import type { FeedbackEffect } from '../presentation/feedback.js';
 
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
 
@@ -38,15 +39,16 @@ export class ActorCards {
     });
   }
 
-  present(world: WorldState): void {
+  present(world: WorldState, effects: readonly FeedbackEffect[] = []): void {
     const summary = world.actors.map(actor => {
       const card = this.cards.get(actor.id)!;
       const bombs = world.bombs.filter(bomb => bomb.ownerId === actor.id).length;
-      card.status.setText(actor.alive ? '存活' : '已淘汰').setColor(actor.alive ? '#b8d1c6' : '#ffaf8c');
+      const gain = effects.findLast(effect => effect.kind === 'pickup' && effect.actorId === actor.id)?.label;
+      card.status.setText(actor.alive ? gain ?? '存活' : '已淘汰').setColor(actor.alive ? gain ? '#83dfb6' : '#b8d1c6' : '#ffaf8c');
       card.portrait?.setAlpha(actor.alive ? 1 : 0.35);
       const values = [`${bombs}/${actor.abilities.bombCapacity}`, String(actor.abilities.blastRange), String(Number(actor.abilities.speed.toFixed(2)))];
       card.values.forEach((text, index) => text.setText(values[index]!).setColor(actor.alive ? '#eaf3ed' : '#b8d1c6'));
-      return { id: actor.id, name: actorIdentity(world, actor).name, alive: actor.alive, bombs, ...actor.abilities,
+      return { id: actor.id, name: actorIdentity(world, actor).name, alive: actor.alive, gain: gain ?? '', bombs, ...actor.abilities,
         bounds: { x: card.root.x, y: card.root.y, width: arenaLayout.actorCards.width, height: arenaLayout.actorCards.height } };
     });
     this.root.scene.game.canvas.dataset.actorCards = JSON.stringify(summary);
