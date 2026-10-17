@@ -25,6 +25,7 @@
     "art:themes": "tsx scripts/build-theme-art.ts",
     "art:skins": "tsx scripts/build-skin-art.ts",
     "art:feedback": "tsx scripts/build-feedback-audio.ts",
+    "benchmark:match": "tsx scripts/benchmark-match.ts",
     "check:architecture": "tsx scripts/check-architecture.ts",
     "check": "pnpm typecheck && pnpm typecheck:core && pnpm typecheck:browser && pnpm test && pnpm check:architecture && pnpm build"
   },

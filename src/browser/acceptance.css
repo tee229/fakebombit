@@ -1,0 +1,22 @@
+.acceptance-panel { position: fixed; z-index: 30; inset: 1rem; margin: auto; width: min(960px, calc(100vw - 2rem)); height: max-content; max-height: calc(100dvh - 2rem); overflow: auto; padding: 24px; background: #102b2c; border: 2px solid #83dfb6; color: #eaf3ed; line-height: 1.5; }
+.acceptance-panel[hidden], .acceptance-open[hidden] { display: none; }
+.acceptance-panel h1 { font-size: 26px; margin: 0 0 12px; }
+.acceptance-panel p { color: #b8d1c6; margin: 12px 0 18px; }
+.acceptance-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; }
+.acceptance-panel label { display: grid; gap: 6px; }
+.acceptance-panel input:not([type=checkbox]), .acceptance-panel select, .acceptance-panel textarea { width: 100%; min-width: 0; border: 1px solid #79958c; border-radius: 4px; padding: 10px; color: #eaf3ed; background: #173737; font: inherit; caret-color: #83dfb6; }
+.acceptance-panel input::placeholder, .acceptance-panel textarea::placeholder { color: #b8d1c6; }
+.acceptance-panel textarea { resize: vertical; }
+.acceptance-panel button, .acceptance-open { min-height: 44px; padding: 10px 18px; border: 1px solid #83dfb6; border-radius: 5px; background: #83dfb6; color: #102b2c; font: inherit; cursor: pointer; }
+.acceptance-panel button:hover, .acceptance-open:hover { background: #a2edce; }
+.acceptance-panel button:active, .acceptance-open:active { background: #6ec9a4; }
+.acceptance-panel button:disabled { opacity: .5; cursor: default; }
+.acceptance-panel :focus-visible, .acceptance-open:focus-visible { outline: 3px solid #f1ca7c; outline-offset: 3px; }
+.acceptance-actions { display: flex; gap: 12px; flex-wrap: wrap; margin: 20px 0; }
+.acceptance-panel fieldset { margin: 20px 0; padding: 16px; border: 1px solid #496562; }
+.acceptance-panel fieldset label { display: flex; gap: 10px; align-items: start; padding: 8px 0; }
+.acceptance-panel input[type=checkbox] { accent-color: #83dfb6; width: 20px; height: 20px; flex-shrink: 0; }
+.acceptance-panel details { margin-top: 20px; }
+.acceptance-panel summary { cursor: pointer; padding: 12px 0; }
+.acceptance-open { position: fixed; z-index: 20; transform: translate(-50%, -50%); font-size: 14px; }
+@media (max-width: 560px) { .acceptance-fields { grid-template-columns: 1fr; } .acceptance-panel { padding: 16px; } }

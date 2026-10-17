@@ -11,25 +11,30 @@ import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout } from './layout.js';
 import { preloadFeedbackAudio } from './feedback-audio.js';
+import { AcceptancePanel } from './acceptance-panel.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
 class GameScene extends Phaser.Scene {
   private flow: GameFlow<HTMLImageElement> | undefined;
   private menu: ThemeMenu | undefined;
+  private acceptance: AcceptancePanel | undefined;
   private arena: Arena = 'generated';
   private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
   preload(): void { preloadMenu(this); preloadFeedbackAudio(this); }
   create(): void {
+    if (new URLSearchParams(location.search).get('acceptance') === '1') this.acceptance = new AcceptancePanel(this.game.canvas);
     this.flow = createGameFlow({ resources, selection: diagnosticPackage(withSkin(builtinThemes[0]!, builtinSkins[0]!)),
-      makeMatch: (theme, initialization) => { installTextures(this, theme); const setup = makeMatch(initialization); this.arena = setup.arena; return setup.match; },
+      makeMatch: (theme, initialization) => { const started = this.acceptance ? performance.now() : 0;
+        installTextures(this, theme); const setup = makeMatch(initialization); this.arena = setup.arena;
+        if (this.acceptance) this.acceptance.recordCreation(performance.now() - started); return setup.match; },
       freshMatch, mountRun: run => this.mountRun(run),
     });
     this.menu = new ThemeMenu(this, this.flow);
     const canvas = this.game.canvas;
     canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-describedby', 'instructions'); canvas.focus({ preventScroll: true });
-    const background = () => { this.flow?.pause('background'); };
+    const background = () => { this.acceptance?.interrupt(); this.flow?.pause('background'); };
     const visibility = () => { if (document.visibilityState === 'hidden') background(); };
     const resize = () => this.live?.controls.clear();
     window.addEventListener('blur', background); window.addEventListener('pagehide', background);
@@ -38,12 +43,14 @@ class GameScene extends Phaser.Scene {
     const cleanup = () => {
       if (disposed) return; disposed = true;
       this.flow?.dispose(); this.menu?.destroy(); this.flow = undefined; this.menu = undefined;
+      this.acceptance?.dispose(); this.acceptance = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
       window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', visibility);
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
     this.menu.present(this.flow.read());
+    this.acceptance?.focus();
   }
 
   private mountRun(run: GameRun<HTMLImageElement>): RunPresentation {
@@ -58,6 +65,7 @@ class GameScene extends Phaser.Scene {
       if (disposed) return; disposed = true;
       for (const remove of detach.splice(0)) remove();
       controls?.destroy(); view?.destroy(); extras.destroy(true); this.sound.stopAll();
+      this.acceptance?.endRun(run.id);
       if (this.live?.id === run.id) this.live = undefined;
     };
     try {
@@ -98,6 +106,7 @@ class GameScene extends Phaser.Scene {
       const labels = { generated: `种子地图：1 名玩家对 ${world.actors.length - 1} 名正常 AI`, normal: '正常 AI 练习场', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
       canvas.setAttribute('aria-label', `${labels[this.arena]}。种子：${world.initialization.seed}。R 重试，N 新开，M 返回菜单。`);
       this.status('本局已开始。摇杆或方向键移动，空格放弹；P 暂停，R 重试，N 新开，M 返回菜单。');
+      this.acceptance?.beginRun(run, this.arena);
       return { dispose,
         pause: () => { controls?.clear(); view?.stopAudio(); this.sound.pauseAll(); this.status('对局已暂停。可调音量和粒子，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
         resume: () => { controls?.clear(); this.sound.resumeAll(); this.status('已继续。重新操作摇杆或方向键移动。'); },
@@ -109,8 +118,11 @@ class GameScene extends Phaser.Scene {
   private status(message: string): void { const status = document.getElementById('game-status'); if (status) status.textContent = message; }
   update(): void {
     if (!this.flow) return;
+    const measuredAt = this.acceptance ? performance.now() : 0;
+    const measuringPlay = Boolean(this.acceptance && this.flow.read().phase === 'playing' && document.visibilityState === 'visible' && document.hasFocus() && !this.acceptance.isOpen());
     if (document.visibilityState === 'hidden') this.flow.pause('background');
     const state = this.flow.advanceFrame(this.game.loop.rawDelta);
+    const logicDoneAt = this.acceptance ? performance.now() : 0;
     this.menu?.present(state);
     const { run } = state;
     if (run && this.live) {
@@ -138,6 +150,17 @@ class GameScene extends Phaser.Scene {
     canvas.dataset.runListeners = String(this.live?.listenerCount() ?? 0);
     canvas.dataset.sceneObjects = String(this.children.list.length); canvas.dataset.textures = String(this.textures.getTextureKeys().length);
     canvas.dataset.soundInstances = String(this.sound.getAll('').length);
+    if (this.acceptance) {
+      const world = run?.frame.world;
+      const countObjects = (objects: readonly Phaser.GameObjects.GameObject[]): number => objects.reduce((sum, object) => sum + 1 + (object instanceof Phaser.GameObjects.Container ? countObjects(object.list) : 0), 0);
+      this.acceptance.frame(state, { active: measuringPlay, intervalMs: this.game.loop.rawDelta,
+        logicMs: logicDoneAt - measuredAt, presentationMs: performance.now() - logicDoneAt,
+        steps: run?.frame.steps ?? 0, droppedTimeMs: run?.frame.droppedTimeMs ?? 0,
+        counters: { particles: Number(canvas.dataset.feedbackParticles ?? 0), sounds: this.sound.getAll('').length,
+          textures: this.textures.getTextureKeys().length, objects: countObjects(this.children.list), bombs: world?.bombs.length ?? 0,
+          hazardCells: world?.hazards.reduce((sum, hazard) => sum + hazard.cells.length, 0) ?? 0,
+          aiSearchStates: Math.max(0, ...world?.actors.map(actor => actor.ai?.searchedStates ?? 0) ?? []) } });
+    }
   }
 }
 

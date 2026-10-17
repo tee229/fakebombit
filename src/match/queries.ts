@@ -12,19 +12,32 @@ export function adjacentPassage(map: SemanticMap, cell: Position, direction: Dir
   return moved.x === target.x + 0.5 && moved.y === target.y + 0.5 ? target : null;
 }
 
-/** Passage, movement and damage for one candidate step, using the authoritative motion rules. */
-export function projectStep(world: QueryWorld, forecast: DangerForecast, actor: ActorState, direction: Direction | null,
-  tick: number, exitBombIds: readonly string[]) {
-  const phase = forecast.changes.findLast(change => change.tick <= tick)!;
-  const rules = world.initialization.rules;
-  const moved = direction === null ? { position: actor.position, heading: null, path: [actor.position] }
-    : moveActor(actor, direction, { ...rules, speed: actor.abilities.speed }, { ...world.initialMap,
-      blockers: [...phase.blockers, ...phase.bombs.filter(bomb => !exitBombIds.includes(bomb.id))] });
-  const safe = !forecast.windows.some(interval =>
-    (interval.startTick <= tick && interval.endTick > tick && interval.cells.some(cell => pathTouchesCell(moved.path, cell, rules.radius)))
-    || (interval.startTick <= tick + 1 && interval.endTick > tick + 1 && interval.cells.some(cell => overlapsCell(moved.position, cell, rules.radius))));
-  return { actor: { ...actor, position: moved.position, previousPosition: actor.position, heading: moved.heading }, safe,
-    exitBombIds: exitBombIds.filter(id => phase.bombs.some(bomb => bomb.id === id && overlapsCell(moved.position, bomb, rules.radius))) };
+/** One search owns cached movement facts; time-dependent damage is still checked on every edge. */
+export function createStepProjector(world: QueryWorld, forecast: DangerForecast) {
+  const movement = new Map<string, ReturnType<typeof moveActor>>();
+  const maps = new Map<string, { id: number; map: Parameters<typeof moveActor>[3] }>();
+  return (actor: ActorState, direction: Direction | null, tick: number, exitBombIds: readonly string[]) => {
+    const phase = forecast.changes.findLast(change => change.tick <= tick)!;
+    const rules = world.initialization.rules;
+    const mapKey = JSON.stringify([phase.tick, exitBombIds]);
+    let entry = maps.get(mapKey);
+    if (!entry) {
+      entry = { id: maps.size, map: { ...world.initialMap, blockers: [...phase.blockers, ...phase.bombs.filter(bomb => !exitBombIds.includes(bomb.id))] } };
+      maps.set(mapKey, entry);
+    }
+    const key = `${entry.id}:${actor.position.x}:${actor.position.y}:${actor.heading}:${actor.abilities.speed}:${direction}`;
+    let moved = movement.get(key);
+    if (!moved) {
+      moved = direction === null ? { position: actor.position, heading: null, path: [actor.position] }
+        : moveActor(actor, direction, { ...rules, speed: actor.abilities.speed }, entry.map);
+      if (movement.size < 8192) movement.set(key, moved);
+    }
+    const safe = !forecast.windows.some(interval =>
+      (interval.startTick <= tick && interval.endTick > tick && interval.cells.some(cell => pathTouchesCell(moved.path, cell, rules.radius)))
+      || (interval.startTick <= tick + 1 && interval.endTick > tick + 1 && interval.cells.some(cell => overlapsCell(moved.position, cell, rules.radius))));
+    return { actor: { ...actor, position: moved.position, previousPosition: actor.position, heading: moved.heading }, safe,
+      exitBombIds: exitBombIds.filter(id => phase.bombs.some(bomb => bomb.id === id && overlapsCell(moved.position, bomb, rules.radius))) };
+  };
 }
 
 export function safeToWait(world: QueryWorld, forecast: DangerForecast, actor: ActorState, tick: number): boolean {

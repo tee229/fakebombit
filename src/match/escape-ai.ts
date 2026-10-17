@@ -1,6 +1,6 @@
 import type { ActorState, Direction, GameplayIntent, WorldState } from './index.js';
 import { forecastDanger } from './forecast.js';
-import { projectStep, safeToWait, type QueryWorld } from './queries.js';
+import { createStepProjector, safeToWait, type QueryWorld } from './queries.js';
 
 export interface EscapeAiConfig {
   readonly reactionSeconds: number;
@@ -18,6 +18,7 @@ export interface EscapeAiState {
 
 export function findEscape(world: QueryWorld, actor: ActorState, config: Pick<EscapeAiConfig, 'maxSearchStates' | 'searchHorizonSeconds'>) {
   const forecast = forecastDanger(world);
+  const projectStep = createStepProjector(world, forecast);
   type Node = { actor: ActorState; tick: number; exitBombIds: readonly string[]; parent: number; move: Direction | null };
   const queue: Node[] = [{ actor, tick: world.tick, exitBombIds: world.bombs.filter(bomb => bomb.exitActorIds.includes(actor.id)).map(bomb => bomb.id), parent: -1, move: null }];
   const seen = new Set<string>();
@@ -33,7 +34,7 @@ export function findEscape(world: QueryWorld, actor: ActorState, config: Pick<Es
     }
     if (node.tick >= horizon) continue;
     for (const direction of ['up', 'right', 'down', 'left', null] as const) {
-      const next = projectStep(world, forecast, node.actor, direction, node.tick, node.exitBombIds);
+      const next = projectStep(node.actor, direction, node.tick, node.exitBombIds);
       if (!next.safe) continue;
       const key = `${node.tick + 1}:${next.actor.position.x.toFixed(9)},${next.actor.position.y.toFixed(9)}:${next.actor.heading}:${next.exitBombIds.join(',')}`;
       if (seen.has(key)) continue;

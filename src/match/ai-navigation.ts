@@ -1,11 +1,12 @@
 import type { ActorState, Direction, Position, WorldState } from './index.js';
 import { forecastDanger } from './forecast.js';
-import { projectStep, safeToWait } from './queries.js';
+import { createStepProjector, safeToWait } from './queries.js';
 import type { EscapeAiConfig } from './escape-ai.js';
 
 /** Bounded goal-directed search; every edge is a real logical movement step. */
 export function findRoute(world: WorldState, actor: ActorState, goal: Position | null, config: Pick<EscapeAiConfig, 'maxSearchStates' | 'searchHorizonSeconds'>) {
   const forecast = forecastDanger(world);
+  const projectStep = createStepProjector(world, forecast);
   type Node = { actor: ActorState; tick: number; exitBombIds: readonly string[]; parent: number; move: Direction | null };
   const nodes: Node[] = [{ actor, tick: world.tick, exitBombIds: world.bombs.filter(bomb => bomb.exitActorIds.includes(actor.id)).map(bomb => bomb.id), parent: -1, move: null }];
   const targets: Position[] = goal ? [{ x: goal.x + 0.5, y: goal.y + 0.5 }] : [];
@@ -35,7 +36,7 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
     if (node.tick >= horizon) continue;
     for (const direction of ['up', 'right', 'down', 'left', null] as const) {
       if (direction === null && forecast.windows.length === 0) continue;
-      const next = projectStep(world, forecast, node.actor, direction, node.tick, node.exitBombIds);
+      const next = projectStep(node.actor, direction, node.tick, node.exitBombIds);
       if (!next.safe || (direction !== null && next.actor.position.x === node.actor.position.x && next.actor.position.y === node.actor.position.y)) continue;
       const key = `${node.tick + 1}:${next.actor.position.x.toFixed(9)},${next.actor.position.y.toFixed(9)}:${next.actor.heading}:${next.exitBombIds.join(',')}`;
       if (seen.has(key)) continue;

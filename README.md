@@ -199,3 +199,7 @@ Choose 糖果乐园 or 玩具工厂 on the canvas before starting. R retries the
 ## Visual and sound feedback
 
 Issue #15 uses the user-selected stronger arcade sample: directional live-danger strokes, local impact rings, candy confetti / wooden fragments, and short explosion, break, pickup and elimination cues. Gains appear briefly in actor side cards. Menu and pause buttons adjust volume and particle budget; reduced-motion preferences suppress debris. Feedback consumes ordered events once and never changes gameplay randomness, danger windows or results. See [the feedback contract](docs/feedback.md) and [validation](docs/validation/issue-15-feedback.md). Run `pnpm art:feedback` to regenerate the original audio.
+
+## Mobile acceptance in progress
+
+Open `/?acceptance=1&seed=issue16-baseline-c` for local-only performance recording and report export. The user-confirmed target is OPPO Find X8 / Android 17 with Edge, Chrome and DuckDuckGo; each needs real-device evidence. A formal sample retains the 17×15, 1v3 defaults and requires 60 continuous foreground seconds. See [the procedure](docs/mobile-acceptance.md) and [pending device matrix](docs/validation/issue-16-mobile-acceptance.md). Desktop and simulated viewports do not close #16. `pnpm benchmark:match` reproduces the independent desktop rule workload.
