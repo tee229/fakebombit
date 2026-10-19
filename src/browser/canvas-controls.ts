@@ -3,18 +3,17 @@ import type { PlayerInput, TouchState } from '../input/player.js';
 import type { GameFrame } from '../game-flow/session.js';
 import type { Position } from '../match/index.js';
 import { arenaLayout as layout } from './layout.js';
+import { appearance, hex } from './appearance.js';
 import { feedbackLabels, cycleVolume, cycleParticles } from './feedback-settings.js';
 
-type Control = 'joystick' | 'bomb' | 'pause' | 'resume' | 'retry' | 'newMatch' | 'menu' | 'volume' | 'particles' | 'fullscreen';
+type Control = 'joystick' | 'bomb' | 'resume' | 'retry' | 'newMatch' | 'menu' | 'volume' | 'particles';
 type PointerEventName = 'pointerdown' | 'pointermove' | 'pointerup' | 'pointercancel' | 'lostpointercapture';
-type Commands = { pause(): void; resume(): void; retry(): void; newMatch(): void; menu(): void; fullscreen(): void };
-const ink = 0xeaf3ed, accent = 0x83dfb6, surface = 0x173737;
+type Commands = { resume(): void; retry(): void; newMatch(): void; menu(): void; };
 
 /** Canvas presentation and native pointer capture; gameplay receives only intents. */
 export class CanvasControls {
   private readonly root: Phaser.GameObjects.Container;
   private readonly graphics: Phaser.GameObjects.Graphics;
-  private readonly pauseLabel: Phaser.GameObjects.Text;
   private readonly pauseMessage: Phaser.GameObjects.Text;
   private readonly pauseLabels: Phaser.GameObjects.Text[];
   private readonly volumeLabel: Phaser.GameObjects.Text;
@@ -22,6 +21,7 @@ export class CanvasControls {
   private readonly pauseTitle: Phaser.GameObjects.Text;
   private readonly controlLabels = new Map<Exclude<Control, 'joystick'>, Phaser.GameObjects.Text>();
   private revision = -1;
+  private appearanceMode = '';
   private readonly pointers = new Map<number, Control>();
   private phase: GameFrame['phase'] = 'playing';
   private readonly canvas: HTMLCanvasElement;
@@ -39,9 +39,7 @@ export class CanvasControls {
       const item = label(layout[control].x, layout[control].y, text, size); this.controlLabels.set(control, item); return item;
     };
     controlLabel('bomb', '放弹');
-    this.pauseLabel = controlLabel('pause', '暂停', 22);
     controlLabel('menu', '返回菜单', 18); controlLabel('retry', '重试'); controlLabel('newMatch', '新开一局', 22);
-    controlLabel('fullscreen', '全屏', 20);
     this.pauseTitle = label(512, 254, '已暂停', 36);
     this.pauseMessage = label(512, 298, '点击继续，重新操作', 22);
     const resumeLabel = controlLabel('resume', '继续游戏', 28).setColor('#102b2c');
@@ -66,22 +64,25 @@ export class CanvasControls {
       for (const [control, text] of this.controlLabels) {
         const shape = layout[control];
         text.setPosition(shape.x, shape.y + (control === 'bomb' ? layout.bomb.radius * .4 : 0))
-          .setFontSize(layout.compact ? (control === 'bomb' ? 16 : control === 'fullscreen' ? 12 : 14) / layout.cssScale : control === 'resume' ? 28 : control === 'menu' ? 18 : 22);
+          .setFontSize(layout.compact ? (control === 'bomb' ? 16 : 14) / layout.cssScale : control === 'resume' ? 28 : control === 'menu' ? 18 : 22);
       }
       this.controlLabels.get('menu')!.setText(layout.compact ? '菜单' : '返回菜单');
       this.pauseTitle.setPosition(layout.pauseTitle.x, layout.pauseTitle.y).setFontSize(layout.compact ? 20 / layout.cssScale : 36);
       this.pauseMessage.setPosition(layout.pauseMessage.x, layout.pauseMessage.y).setFontSize(layout.compact ? 12 / layout.cssScale : 22)
         .setWordWrapWidth(layout.board.width - 16 / layout.cssScale);
     }
+    const palette = appearance(), { ink, accent, surface } = palette;
+    if (this.appearanceMode !== palette.mode) {
+      this.appearanceMode = palette.mode;
+      for (const [control, text] of this.controlLabels) text.setColor(hex(control === 'resume' ? palette.buttonInk : ink));
+      this.pauseTitle.setColor(hex(ink)); this.pauseMessage.setColor(hex(palette.muted));
+    }
     const g = this.graphics.clear();
     const active = this.phase === 'playing';
-    this.controlLabels.get('bomb')!.setVisible(!layout.compact || active);
-    const buttons = layout.compact ? active ? [layout.pause, layout.fullscreen] : [layout.menu, layout.retry, layout.newMatch, layout.fullscreen]
-      : [layout.pause, layout.menu, layout.retry, layout.newMatch];
-    this.pauseLabel.setVisible(!layout.compact || active);
-    for (const control of ['menu', 'retry', 'newMatch'] as const) this.controlLabels.get(control)!.setVisible(!layout.compact || !active);
-    this.controlLabels.get('fullscreen')!.setVisible(layout.compact).setText(document.fullscreenElement ? '退出全屏' : '全屏');
-    if (!layout.compact || active) {
+    this.controlLabels.get('bomb')!.setVisible(active);
+    const buttons = active ? [] : [layout.menu, layout.retry, layout.newMatch];
+    for (const control of ['menu', 'retry', 'newMatch'] as const) this.controlLabels.get(control)!.setVisible(!active);
+    if (active) {
     g.fillStyle(surface).fillCircle(layout.joystick.x, layout.joystick.y, layout.joystick.radius);
     g.lineStyle(3, active && touch.joystickActive ? accent : 0x79958c).strokeCircle(layout.joystick.x, layout.joystick.y, layout.joystick.radius);
     // Four authored cardinal chevrons, with a knob that stays inside the base.
@@ -93,7 +94,7 @@ export class CanvasControls {
     }
     g.fillStyle(active ? accent : 0x496562).fillCircle(layout.joystick.x + touch.knob.x * layout.joystick.radius * .65, layout.joystick.y + touch.knob.y * layout.joystick.radius * .65, layout.joystick.radius * .30);
     g.fillStyle(active && touch.bombHeld ? 0x496562 : surface).fillCircle(layout.bomb.x, layout.bomb.y, layout.bomb.radius);
-    g.lineStyle(3, active ? 0xf1ca7c : 0x79958c).strokeCircle(layout.bomb.x, layout.bomb.y, layout.bomb.radius);
+    g.lineStyle(3, palette.mode === 'light' ? 0x8c5e12 : 0xf1ca7c).strokeCircle(layout.bomb.x, layout.bomb.y, layout.bomb.radius);
     const unit = layout.bomb.radius / 72;
     g.lineStyle(3 * unit, ink).strokeCircle(layout.bomb.x, layout.bomb.y - 17 * unit, 18 * unit)
       .lineBetween(layout.bomb.x + 8 * unit, layout.bomb.y - 33 * unit, layout.bomb.x + 16 * unit, layout.bomb.y - 43 * unit);
@@ -102,10 +103,9 @@ export class CanvasControls {
       g.fillStyle(surface).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       g.lineStyle(2, 0x79958c).strokeRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
     }
-    this.pauseLabel.setAlpha(active ? 1 : 0.45);
     for (const item of this.pauseLabels) item.setVisible(this.phase === 'paused');
     if (this.phase === 'paused') {
-      g.fillStyle(0x102b2c, 0.96).fillRect(layout.board.x, layout.board.y, layout.board.width, layout.board.height);
+      g.fillStyle(palette.background, 0.96).fillRect(layout.board.x, layout.board.y, layout.board.width, layout.board.height);
       const button = layout.resume;
       g.fillStyle(accent).fillRoundedRect(button.x - button.width / 2, button.y - button.height / 2, button.width, button.height, 8);
       this.pauseMessage.setText(frame.pauseReason === 'background' ? '离开页面已暂停，返回后手动继续' : '点击继续，重新操作');
@@ -144,8 +144,7 @@ export class CanvasControls {
     if (event.button !== 0 || this.pointers.has(event.pointerId)) return;
     const point = this.position(event);
     const available: Control[] = this.phase === 'paused' ? ['resume', 'retry', 'newMatch', 'menu', 'volume', 'particles']
-      : this.phase === 'ended' ? ['retry', 'newMatch', 'menu'] : layout.compact ? ['pause', 'joystick', 'bomb'] : ['pause', 'retry', 'newMatch', 'menu', 'joystick', 'bomb'];
-    if (layout.compact) available.push('fullscreen');
+      : this.phase === 'ended' ? ['retry', 'newMatch', 'menu'] : ['joystick', 'bomb'];
     const control = available.find(item => this.inside(item, point));
     if (!control) return;
     if ((control === 'joystick' || control === 'bomb') && !this.input.pointerDown(event.pointerId, control, this.offset(point))) return;

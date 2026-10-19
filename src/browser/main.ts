@@ -12,6 +12,8 @@ import { CanvasControls } from './canvas-controls.js';
 import { arenaLayout, updateArenaLayout } from './layout.js';
 import { preloadFeedbackAudio } from './feedback-audio.js';
 import { AcceptancePanel } from './acceptance-panel.js';
+import { GameToolbar } from './game-toolbar.js';
+import { appearance, hex } from './appearance.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
@@ -19,8 +21,10 @@ class GameScene extends Phaser.Scene {
   private flow: GameFlow<HTMLImageElement> | undefined;
   private menu: ThemeMenu | undefined;
   private acceptance: AcceptancePanel | undefined;
+  private toolbar: GameToolbar | undefined;
+  private appearanceMode = '';
   private arena: Arena = 'generated';
-  private live: { id: number; view: MatchView; controls: CanvasControls; reflow(): void; listenerCount: () => number; lastResult: string } | undefined;
+  private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
   preload(): void { preloadMenu(this); preloadFeedbackAudio(this); }
   create(): void {
@@ -32,6 +36,9 @@ class GameScene extends Phaser.Scene {
       freshMatch, mountRun: run => this.mountRun(run),
     });
     this.menu = new ThemeMenu(this, this.flow);
+    this.toolbar = new GameToolbar({ pause: () => { this.flow?.pause(); }, resume: () => this.resume(),
+      fullscreen: () => this.fullscreen(), switchView: () => this.live?.view.toggleMode(),
+      menu: () => { this.flow?.returnToMenu(); }, focusCanvas: () => this.game.canvas.focus({ preventScroll: true }) });
     const canvas = this.game.canvas;
     canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-describedby', 'instructions'); canvas.focus({ preventScroll: true });
     const background = () => { this.acceptance?.interrupt(); this.flow?.pause('background'); };
@@ -52,6 +59,7 @@ class GameScene extends Phaser.Scene {
       if (disposed) return; disposed = true;
       this.flow?.dispose(); this.menu?.destroy(); this.flow = undefined; this.menu = undefined;
       this.acceptance?.dispose(); this.acceptance = undefined;
+      this.toolbar?.destroy(); this.toolbar = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
       window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', visibility);
       viewportObserver.disconnect();
@@ -80,19 +88,14 @@ class GameScene extends Phaser.Scene {
     try {
       view = new MatchView(this, run.frame.world, theme, this.arena);
       controls = new CanvasControls(this, input, {
-        pause: () => { flow.pause(); }, resume: () => this.resume(), retry: () => { void flow.retry(); },
+        resume: () => this.resume(), retry: () => { void flow.retry(); },
         newMatch: () => { flow.newMatch(); }, menu: () => { flow.returnToMenu(); },
-        fullscreen: () => this.fullscreen(),
       });
       controls.present(run.frame, input.readTouch());
-      const toggle = this.add.rectangle(300, 34, 108, 64, 0x24483f).setStrokeStyle(1, 0x83dfb6).setInteractive({ useHandCursor: true });
-      const toggleLabel = this.add.text(300, 34, '实体视图 V', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '17px', color: '#eaf3ed' }).setOrigin(0.5);
-      extras.add([toggle, toggleLabel]);
-      const switchView = () => { view?.toggleMode(); toggleLabel.setText(canvas.dataset.view === 'normal' ? '实体视图 V' : '正常画面 V'); };
-      toggle.on('pointerup', switchView);
+      const switchView = () => { view?.toggleMode(); };
       if (theme.diagnostics.length) extras.add(this.add.text(820, 281, '装饰缺失，已省略', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '14px', color: '#ffaf8c' }));
       const keyDown = (event: KeyboardEvent) => {
-        if (event.ctrlKey || event.metaKey || event.altKey || flow.read().run?.id !== run.id) return;
+        if (event.ctrlKey || event.metaKey || event.altKey || this.toolbar?.isOpen() || flow.read().run?.id !== run.id) return;
         const phase = flow.read().phase;
         if (event.code === 'KeyM') { event.preventDefault(); if (!event.repeat) flow.returnToMenu(); }
         else if (event.code === 'KeyN') { event.preventDefault(); if (!event.repeat) flow.newMatch(); }
@@ -106,15 +109,7 @@ class GameScene extends Phaser.Scene {
       const keyUp = (event: KeyboardEvent) => { if (input.keyUp(event.code)) event.preventDefault(); };
       window.addEventListener('keydown', keyDown); detach.push(() => window.removeEventListener('keydown', keyDown));
       window.addEventListener('keyup', keyUp); detach.push(() => window.removeEventListener('keyup', keyUp));
-      let extrasRevision = -1;
-      this.live = { id: run.id, view, controls, reflow: () => {
-        if (extrasRevision === arenaLayout.revision) return;
-        extrasRevision = arenaLayout.revision;
-        const layout = arenaLayout, button = layout.switchView;
-        const visible = !layout.compact || !layout.active;
-        toggle.setPosition(button.x, button.y).setSize(button.width, button.height).setVisible(visible);
-        toggleLabel.setPosition(button.x, button.y).setFontSize(layout.compact ? 14 / layout.cssScale : 17).setVisible(visible);
-      }, listenerCount: () => detach.length, lastResult: '' };
+      this.live = { id: run.id, view, controls, listenerCount: () => detach.length, lastResult: '' };
       const world = run.frame.world;
       canvas.dataset.seed = world.initialization.seed; canvas.dataset.map = JSON.stringify(world.initialMap.blockers);
       canvas.dataset.mapWidth = String(world.initialMap.width); canvas.dataset.mapHeight = String(world.initialMap.height);
@@ -135,6 +130,9 @@ class GameScene extends Phaser.Scene {
 
   private resume(): void { if (document.visibilityState !== 'hidden' && document.hasFocus()) this.flow?.resume(); }
   private fullscreen(): void {
+    if (!document.documentElement.requestFullscreen || !document.exitFullscreen) {
+      this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'); return;
+    }
     const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
     void action.catch(() => this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'));
   }
@@ -148,7 +146,10 @@ class GameScene extends Phaser.Scene {
     const logicDoneAt = this.acceptance ? performance.now() : 0;
     updateArenaLayout(viewportWidth, viewportHeight, state.phase === 'playing');
     this.menu?.present(state);
-    this.live?.reflow();
+    if (this.appearanceMode !== appearance().mode) {
+      this.appearanceMode = appearance().mode; this.cameras.main.setBackgroundColor(hex(appearance().background));
+    }
+    this.toolbar?.present(state.phase, this.game.canvas.dataset.view ?? 'normal', this.acceptance?.isOpen() ?? false);
     const { run } = state;
     if (run && this.live) {
       const { frame } = run, world = frame.world;

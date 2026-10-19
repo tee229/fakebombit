@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { WorldState } from '../match/index.js';
 import { resolveSkinAnimation, type ReadyTheme } from '../resources/index.js';
+import { appearance, hex } from './appearance.js';
 import { actorIdentity } from './actor-identity.js';
 import { arenaLayout } from './layout.js';
 import type { FeedbackEffect } from '../presentation/feedback.js';
@@ -14,6 +15,7 @@ export class ActorCards {
     background: Phaser.GameObjects.Rectangle; name: Phaser.GameObjects.Text; captions: Phaser.GameObjects.Text[];
     status: Phaser.GameObjects.Text; values: Phaser.GameObjects.Text[]; index: number }>();
   private revision = -1;
+  private appearanceMode = '';
 
   constructor(scene: Phaser.Scene, parent: Phaser.GameObjects.Container, world: WorldState, theme: ReadyTheme<HTMLImageElement>) {
     this.root = scene.add.container(); parent.add(this.root);
@@ -51,25 +53,33 @@ export class ActorCards {
       for (const card of this.cards.values()) {
         card.root.setPosition(card.index < 2 ? layout.left : layout.right, (card.index < 2 ? layout.top : layout.rightTop) + card.index % 2 * (layout.height + layout.gap));
         card.background.setPosition(layout.width / 2, layout.height / 2).setSize(layout.width, layout.height);
-        card.portrait?.setPosition(compact ? 17 / s : 30, compact ? 18 / s : 27).setDisplaySize(compact ? 26 / s : 40, compact ? 26 / s : 40);
+        card.portrait?.setPosition(compact ? 17 / s : 30, compact ? 14 / s : 27).setDisplaySize(compact ? 24 / s : 40, compact ? 24 / s : 40);
         card.name.setPosition(compact ? 36 / s : 60, compact ? 1 / s : 7).setFontSize(compact ? 13 / s : 21);
         card.status.setPosition(compact ? layout.width - 7 / s : 60, compact ? 3 / s : 33)
           .setOrigin(compact ? 1 : 0, 0).setFontSize(compact ? 10 / s : 13);
         card.values.forEach((value, index) => {
-          value.setPosition(compact ? (36 / s + (layout.width - 40 / s) * index / 3) : 39 + index * 64, compact ? 19 / s : 63)
+          value.setPosition(compact ? (36 / s + (layout.width - 40 / s) * index / 3) : 39 + index * 64, compact ? 15 / s : 63)
             .setOrigin(compact ? 0 : .5, 0).setFontSize(compact ? 11 / s : 17);
           card.captions[index]!.setVisible(!compact);
         });
       }
     }
+    const palette = appearance();
+    const appearanceChanged = this.appearanceMode !== palette.mode; this.appearanceMode = palette.mode;
     const summary = world.actors.map(actor => {
       const card = this.cards.get(actor.id)!;
+      const identity = actorIdentity(world, actor);
+      if (appearanceChanged) {
+        card.background.setFillStyle(identity.player ? palette.selected : palette.surface).setStrokeStyle(identity.player ? 2 : 1, palette.mode === 'light' ? palette.border : identity.color);
+        card.name.setColor(hex(palette.mode === 'light' ? palette.ink : identity.color));
+        for (const caption of card.captions) caption.setColor(hex(palette.muted));
+      }
       const bombs = world.bombs.filter(bomb => bomb.ownerId === actor.id).length;
       const gain = effects.findLast(effect => effect.kind === 'pickup' && effect.actorId === actor.id)?.label;
-      card.status.setText(actor.alive ? gain ?? '存活' : '已淘汰').setColor(actor.alive ? gain ? '#83dfb6' : '#b8d1c6' : '#ffaf8c');
+      card.status.setText(actor.alive ? gain ?? '存活' : '已淘汰').setColor(hex(actor.alive ? gain ? palette.accent : palette.muted : palette.warning));
       card.portrait?.setAlpha(actor.alive ? 1 : 0.35);
       const values = [`${bombs}/${actor.abilities.bombCapacity}`, String(actor.abilities.blastRange), String(Number(actor.abilities.speed.toFixed(2)))];
-      card.values.forEach((text, index) => text.setText(`${compact ? ['弹', '距', '速'][index] : ''}${values[index]!}`).setColor(actor.alive ? '#eaf3ed' : '#b8d1c6'));
+      card.values.forEach((text, index) => text.setText(`${compact ? ['弹', '距', '速'][index] : ''}${values[index]!}`).setColor(hex(actor.alive ? palette.ink : palette.muted)));
       return { id: actor.id, name: actorIdentity(world, actor).name, alive: actor.alive, gain: gain ?? '', bombs, ...actor.abilities,
         bounds: { x: card.root.x, y: card.root.y, width: arenaLayout.actorCards.width, height: arenaLayout.actorCards.height } };
     });

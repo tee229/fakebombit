@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import type { GameplayEvent, ItemKind, WorldState } from '../match/index.js';
+import { appearance, hex } from './appearance.js';
 import { resultLabels } from './result-labels.js';
 import { interpolatePosition } from './interpolate-position.js';
 import { arenaLayout } from './layout.js';
@@ -47,6 +48,7 @@ export class MatchView {
   private readonly keyboardHelp: Phaser.GameObjects.Text;
   private readonly seedLabel: Phaser.GameObjects.Text;
   private revision = -1;
+  private appearanceMode = '';
   private latestChange = '';
   private consumedEvents = 0;
   private readonly feedback: ReturnType<typeof createFeedback>;
@@ -93,6 +95,12 @@ export class MatchView {
   }
 
   present(world: WorldState, alpha: number, events: readonly GameplayEvent[], deltaMs = 0, animationPaused = false): void {
+    const palette = appearance();
+    if (this.appearanceMode !== palette.mode) {
+      this.appearanceMode = palette.mode;
+      for (const text of [this.title, this.timer, this.progress]) text.setColor(hex(palette.ink));
+      for (const text of [this.subtitle, this.timerLabel, this.history, this.keyboardHelp, this.seedLabel]) text.setColor(hex(palette.muted));
+    }
     if (this.revision !== arenaLayout.revision) {
       this.revision = arenaLayout.revision;
       const layout = arenaLayout, area = layout.board, s = layout.cssScale;

@@ -5,6 +5,7 @@ import { builtinSkins } from '../resources/builtin-skins.js';
 import type { GameFlow, GameFlowState } from '../game-flow/index.js';
 import { diagnosticPackage } from './app-resources.js';
 import { readFeedbackSettings, feedbackLabels, cycleParticles, cycleVolume } from './feedback-settings.js';
+import { appearance, hex } from './appearance.js';
 import { arenaLayout } from './layout.js';
 
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
@@ -41,18 +42,18 @@ export class ThemeMenu {
   private skin(): SkinPackage { return builtinSkins.find(skin => skin.id === this.flow.read().selection.skin?.id) ?? builtinSkins[0]!; }
   private choose(theme: ThemePackage, skin: SkinPackage): void { this.note = ''; this.flow.select(diagnosticPackage(withSkin(theme, skin))); }
   private cancel(): void { this.note = '准备已取消，可重新选择。'; this.flow.returnToMenu(); }
-  private text(x: number, y: number, value: string, size: number, color = '#eaf3ed'): Phaser.GameObjects.Text {
+  private text(x: number, y: number, value: string, size: number, color = hex(appearance().ink)): Phaser.GameObjects.Text {
     const text = this.scene.add.text(x, y, value, { fontFamily: font, fontSize: `${size}px`, color, align: 'center' }).setOrigin(0.5);
     this.content!.add(text); return text;
   }
   private button(x: number, y: number, width: number, label: string, action: () => void, height = 58, size = 22): void {
-    const shape = this.scene.add.rectangle(x, y, width, height, 0x83dfb6).setStrokeStyle(2, 0xa2edce).setInteractive({ useHandCursor: true });
-    shape.on('pointerup', action); this.content!.add(shape); this.text(x, y, label, size, '#102b2c');
+    const shape = this.scene.add.rectangle(x, y, width, height, appearance().accent).setStrokeStyle(2, appearance().border).setInteractive({ useHandCursor: true });
+    shape.on('pointerup', action); this.content!.add(shape); this.text(x, y, label, size, hex(appearance().buttonInk));
   }
   hide(): void { this.content?.destroy(true); this.content = undefined; this.rendered = ''; this.note = ''; }
   present(state: GameFlowState<HTMLImageElement>): void {
     if (state.run || state.phase === 'disposed') { if (this.content) this.hide(); return; }
-    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings(), arenaLayout.width, arenaLayout.height, arenaLayout.cssScale, arenaLayout.compact]);
+    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings(), appearance().mode, arenaLayout.width, arenaLayout.height, arenaLayout.cssScale, arenaLayout.compact]);
     if (key === this.rendered) return;
     this.content?.destroy(true); this.content = this.scene.add.container(); this.rendered = key;
     if (!arenaLayout.compact || state.phase !== 'menu') this.content.setPosition((arenaLayout.width - 1024) / 2, (arenaLayout.height - 576) / 2);
@@ -63,14 +64,14 @@ export class ThemeMenu {
     if (state.phase === 'preparing') {
       canvas.dataset.preparation = String(state.preparationId);
       this.text(512, 205, `正在准备${this.theme().label} · ${this.skin().label}`, 30);
-      this.text(512, 276, '完成后才会开始计时，可随时取消。', 22, '#b8d1c6');
+      this.text(512, 276, '完成后才会开始计时，可随时取消。', 22, hex(appearance().muted));
       this.button(512, 380, 260, '取消准备 · Esc', () => this.cancel());
       this.status('正在准备资源，Escape 或取消按钮返回菜单；对局尚未创建。');
     } else if (state.phase === 'failed') {
       canvas.dataset.error = state.error?.message ?? '';
       this.text(512, 180, '无法开始本局', 34);
-      this.text(512, 245, '资源或初始配置校验失败，对局没有开始。', 22, '#b8d1c6');
-      this.text(512, 295, state.error?.message ?? '', 17, '#ffaf8c').setWordWrapWidth(860);
+      this.text(512, 245, '资源或初始配置校验失败，对局没有开始。', 22, hex(appearance().muted));
+      this.text(512, 295, state.error?.message ?? '', 17, hex(appearance().warning)).setWordWrapWidth(860);
       this.button(355, 405, 250, '重试准备 · Enter', () => { void this.flow.retry(); });
       this.button(669, 405, 250, '返回菜单 · Esc', () => { this.flow.returnToMenu(); });
       this.status(`无法开始本局：${state.error?.message ?? ''}。可重试或返回菜单。`);
@@ -79,49 +80,49 @@ export class ThemeMenu {
   }
   private showSelection(): void {
     if (arenaLayout.compact) { this.showCompactSelection(); return; }
-    this.text(512, 35, 'Fake Bomb It', 32); this.text(512, 75, '选择地图主题和角色皮肤', 23, '#b8d1c6');
+    this.text(512, 35, 'Fake Bomb It', 32); this.text(512, 75, '选择地图主题和角色皮肤', 23, hex(appearance().muted));
     builtinThemes.forEach((theme, index) => {
       const x = index === 0 ? 290 : 734, selected = theme.id === this.theme().id;
-      const panel = this.scene.add.rectangle(x, 214, 396, 236, selected ? 0x24483f : 0x173737).setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      const panel = this.scene.add.rectangle(x, 214, 396, 236, selected ? appearance().selected : appearance().surface).setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
       panel.on('pointerup', () => this.choose(theme, this.skin())); this.content!.add(panel);
       if (this.scene.textures.exists(`preview:${theme.id}`)) this.content!.add(this.scene.add.image(x, 183, `preview:${theme.id}`).setDisplaySize(240, 144));
       this.text(x, 280, `${selected ? '● ' : ''}${theme.label}`, 24);
-      this.text(x, 314, index === 0 ? '奶油墙 · 威化障碍 · 巧克力炸弹' : '积木墙 · 纸箱障碍 · 金属炸弹', 17, '#b8d1c6');
+      this.text(x, 314, index === 0 ? '奶油墙 · 威化障碍 · 巧克力炸弹' : '积木墙 · 纸箱障碍 · 金属炸弹', 17, hex(appearance().muted));
     });
-    this.text(512, 353, '角色皮肤 · ↑ ↓ 切换', 18, '#b8d1c6');
+    this.text(512, 353, '角色皮肤 · ↑ ↓ 切换', 18, hex(appearance().muted));
     builtinSkins.forEach((skin, index) => {
       const x = index === 0 ? 330 : 694, selected = skin.id === this.skin().id;
-      const panel = this.scene.add.rectangle(x, 416, 320, 88, selected ? 0x24483f : 0x173737).setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      const panel = this.scene.add.rectangle(x, 416, 320, 88, selected ? appearance().selected : appearance().surface).setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
       panel.on('pointerup', () => this.choose(this.theme(), skin)); this.content!.add(panel);
       if (this.scene.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.scene.add.image(x - 96, 410, `skin-preview:${skin.id}`).setDisplaySize(78, 78));
-      this.text(x + 36, 401, skin.label, 24); this.text(x + 36, 431, selected ? '已选择' : '点击选用', 17, selected ? '#83dfb6' : '#b8d1c6');
+      this.text(x + 36, 401, skin.label, 24); this.text(x + 36, 431, selected ? '已选择' : '点击选用', 17, selected ? hex(appearance().accent) : hex(appearance().muted));
     });
     this.button(512, 501, 360, `开始 · ${this.skin().label}`, () => { void this.flow.start(); });
     const settings = feedbackLabels();
     this.button(166, 501, 232, settings.volume, cycleVolume);
     this.button(858, 501, 232, settings.particles, cycleParticles);
-    this.text(512, 552, this.note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, '#b8d1c6');
+    this.text(512, 552, this.note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, hex(appearance().muted));
     this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。左右选主题，上下选皮肤，Enter 或点击开始。`);
   }
   private showCompactSelection(): void {
     const s = arenaLayout.cssScale, width = arenaLayout.width * s, height = arenaLayout.height * s;
-    const text = (x: number, y: number, value: string, size: number, color = '#eaf3ed') => this.text(x / s, y / s, value, size / s, color);
+    const text = (x: number, y: number, value: string, size: number, color = hex(appearance().ink)) => this.text(x / s, y / s, value, size / s, color);
     text(width / 2, 22, 'Fake Bomb It · 选择外观', 17);
     builtinThemes.forEach((theme, index) => {
       const x = width * (index === 0 ? .25 : .75), selected = theme.id === this.theme().id;
-      const panel = this.scene.add.rectangle(x / s, 78 / s, (width / 2 - 24) / s, 68 / s, selected ? 0x24483f : 0x173737)
-        .setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      const panel = this.scene.add.rectangle(x / s, 78 / s, (width / 2 - 24) / s, 68 / s, selected ? appearance().selected : appearance().surface)
+        .setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
       panel.on('pointerup', () => this.choose(theme, this.skin())); this.content!.add(panel);
       if (this.scene.textures.exists(`preview:${theme.id}`)) this.content!.add(this.scene.add.image((x - 65) / s, 78 / s, `preview:${theme.id}`).setDisplaySize(82 / s, 50 / s));
-      text(x + 42, 78, `${selected ? '● ' : ''}${theme.label}`, 17, selected ? '#83dfb6' : '#eaf3ed');
+      text(x + 42, 78, `${selected ? '● ' : ''}${theme.label}`, 17, selected ? hex(appearance().accent) : hex(appearance().ink));
     });
     builtinSkins.forEach((skin, index) => {
       const x = width * (index === 0 ? .25 : .75), selected = skin.id === this.skin().id;
-      const panel = this.scene.add.rectangle(x / s, 148 / s, (width / 2 - 24) / s, 44 / s, selected ? 0x24483f : 0x173737)
-        .setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      const panel = this.scene.add.rectangle(x / s, 148 / s, (width / 2 - 24) / s, 44 / s, selected ? appearance().selected : appearance().surface)
+        .setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
       panel.on('pointerup', () => this.choose(this.theme(), skin)); this.content!.add(panel);
       if (this.scene.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.scene.add.image((x - 62) / s, 148 / s, `skin-preview:${skin.id}`).setDisplaySize(36 / s, 36 / s));
-      text(x + 24, 148, `${selected ? '● ' : ''}${skin.label}`, 15, selected ? '#83dfb6' : '#eaf3ed');
+      text(x + 24, 148, `${selected ? '● ' : ''}${skin.label}`, 15, selected ? hex(appearance().accent) : hex(appearance().ink));
     });
     const settings = feedbackLabels(), y = (height - 30) / s;
     this.button(width / 2 / s, y, 200 / s, `开始 · ${this.skin().label}`, () => { void this.flow.start(); }, 44 / s, 16 / s);
