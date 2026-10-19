@@ -56,6 +56,15 @@ test('external intents cannot override an AI or mutate controller state on rejec
   expect(match.readWorld()).toEqual(before);
 });
 
+test('a queued escape still succeeds after the search rejects another branch at its state limit', () => {
+  const match = createMatch({ ...config, rules: { ...config.rules, speed: 10 },
+    actors: [config.actors[0]!, { ...config.actors[1]!, ai: { reactionSeconds: 0, maxSearchStates: 2 } }],
+  });
+  match.advanceTick([{ actorId: 'player', move: null, bomb: true }]);
+  match.advanceTick();
+  expect(match.readWorld().actors[1]).toMatchObject({ position: { x: 4.5, y: 2.5 }, ai: { status: 'escaping', searchedStates: 2 } });
+});
+
 test('AI waits through the fire expiration boundary, then exits an overlapping bomb before its explosion', () => {
   const match = createMatch({ ...config,
     map: { ...config.map, spawns: [{ id: 'player', x: 3, y: 3 }, { id: 'enemy', x: 1, y: 3 }],

@@ -33,15 +33,17 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
       if (!goal || (Math.floor(node.actor.position.x) === goal.x && Math.floor(node.actor.position.y) === goal.y)) return finish(index, true);
       if (estimate(node.actor.position) < estimate(nodes[best]!.actor.position)) best = index;
     }
-    if (node.tick >= horizon) continue;
+    // Once a new state was rejected, the queue cannot grow again. Still visit
+    // queued nodes above so their goal/best-route checks retain the same order.
+    if (node.tick >= horizon || exhausted) continue;
     for (const direction of ['up', 'right', 'down', 'left', null] as const) {
       if (direction === null && forecast.windows.length === 0) continue;
       const next = projectStep(node.actor, direction, node.tick, node.exitBombIds);
       if (!next.safe || (direction !== null && next.actor.position.x === node.actor.position.x && next.actor.position.y === node.actor.position.y)) continue;
-      const key = `${node.tick + 1}:${next.actor.position.x.toFixed(9)},${next.actor.position.y.toFixed(9)}:${next.actor.heading}:${next.exitBombIds.join(',')}`;
+      const key = `${node.tick + 1}:${next.stateKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (nodes.length >= config.maxSearchStates) { exhausted = true; continue; }
+      if (nodes.length >= config.maxSearchStates) { exhausted = true; break; }
       const nextIndex = nodes.length;
       nodes.push({ ...next, tick: node.tick + 1, parent: index, move: direction });
       const rank = node.tick + 1 - world.tick + estimate(next.actor.position) * world.initialization.rules.tickRate / actor.abilities.speed;

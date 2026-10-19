@@ -32,14 +32,16 @@ export function findEscape(world: QueryWorld, actor: ActorState, config: Pick<Es
       while (queue[cursor]!.parent >= 0) { plan.push(queue[cursor]!.move); cursor = queue[cursor]!.parent; }
       return { plan: plan.reverse(), status: plan.length ? 'escaping' as const : 'safe' as const, searchedStates: head + 1 };
     }
-    if (node.tick >= horizon) continue;
+    // Keep checking queued escape states after the budget rejects a new state,
+    // but do not calculate more edges that cannot be enqueued.
+    if (node.tick >= horizon || exhausted) continue;
     for (const direction of ['up', 'right', 'down', 'left', null] as const) {
       const next = projectStep(node.actor, direction, node.tick, node.exitBombIds);
       if (!next.safe) continue;
-      const key = `${node.tick + 1}:${next.actor.position.x.toFixed(9)},${next.actor.position.y.toFixed(9)}:${next.actor.heading}:${next.exitBombIds.join(',')}`;
+      const key = `${node.tick + 1}:${next.stateKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (queue.length >= config.maxSearchStates) { exhausted = true; continue; }
+      if (queue.length >= config.maxSearchStates) { exhausted = true; break; }
       queue.push({ ...next, tick: node.tick + 1, parent: head, move: direction });
     }
   }

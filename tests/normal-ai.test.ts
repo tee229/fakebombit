@@ -53,6 +53,15 @@ test('a normal AI waits for a real drop to activate, then navigates to collect i
   expect(abilities.bombCapacity > 1 || abilities.blastRange > 1 || abilities.speed > 3).toBe(true);
 });
 
+test('a goal already queued at the state limit is reached before reporting no route', () => {
+  const match = createMatch({ ...config, rules: { ...config.rules, speed: 10 },
+    map: { ...config.map, blockers: [{ id: 'crate', type: 'breakable-wall', x: 6, y: 3 }] },
+    actors: [config.actors[0]!, { ...config.actors[1]!, ai: { mode: 'normal', reactionSeconds: 0, maxSearchStates: 3 } }],
+  });
+  match.advanceTick();
+  expect(match.readWorld().actors[1]).toMatchObject({ position: { x: 5.5, y: 3.5 }, ai: { status: 'breaking', searchedStates: 3 } });
+});
+
 test('a normal AI approaches an opponent, threatens it with a real bomb and survives its own attack', () => {
   const match = createMatch({ ...config, map: { ...config.map, blockers: [], spawns: [{ id: 'player', x: 6, y: 3 }, { id: 'enemy', x: 4, y: 3 }] } });
   const events: GameplayEvent[] = [];

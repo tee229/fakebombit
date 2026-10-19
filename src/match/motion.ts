@@ -2,7 +2,31 @@ import type { ActorState, Direction, MovementRules, Position, SemanticMap } from
 
 export const vectors: Record<Direction, Position> = { up: { x: 0, y: -1 }, right: { x: 1, y: 0 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 } };
 
-type CollisionMap = Pick<SemanticMap, 'width' | 'height'> & { readonly blockers: readonly Position[] };
+type CollisionMap = Pick<SemanticMap, 'width' | 'height'> & {
+  readonly blockers: readonly Position[];
+  readonly collision?: { readonly rows: ReadonlyMap<number, readonly Position[]>; readonly columns: ReadonlyMap<number, readonly Position[]>; readonly cells: ReadonlySet<string> };
+};
+
+/** Derived per-query index; the blocker list remains the source of truth. */
+export function indexCollisionMap(map: CollisionMap): CollisionMap {
+  const rows = new Map<number, Position[]>(), columns = new Map<number, Position[]>(), cells = new Set<string>();
+  for (const wall of map.blockers) {
+    if (!rows.has(wall.y)) rows.set(wall.y, []);
+    if (!columns.has(wall.x)) columns.set(wall.x, []);
+    rows.get(wall.y)!.push(wall); columns.get(wall.x)!.push(wall); cells.add(`${wall.x}:${wall.y}`);
+  }
+  return { ...map, collision: { rows, columns, cells } };
+}
+
+function blockersAcross(map: CollisionMap, coordinate: number, axis: 'x' | 'y', radius: number): readonly Position[] {
+  if (!map.collision) return map.blockers;
+  const groups = axis === 'x' ? map.collision.columns : map.collision.rows;
+  const first = Math.floor(coordinate - radius), last = Math.floor(coordinate + radius);
+  if (first === last) return groups.get(first) ?? [];
+  const blockers: Position[] = [];
+  for (let cell = first; cell <= last; cell++) blockers.push(...groups.get(cell) ?? []);
+  return blockers;
+}
 
 export function overlapsCell(position: Position, cell: Position, radius: number): boolean {
   return position.x + radius > cell.x && position.x - radius < cell.x + 1
@@ -26,7 +50,7 @@ export function moveAxis(position: Position, direction: Direction, distance: num
   const sign = vector[axis];
   const start = position[axis];
   let end = Math.max(0.5, Math.min((axis === 'x' ? map.width : map.height) - 0.5, start + sign * distance));
-  for (const wall of map.blockers) {
+  for (const wall of blockersAcross(map, position[across], across, radius)) {
     if (position[across] + radius <= wall[across] || position[across] - radius >= wall[across] + 1) continue;
     // Stop at the preceding cell center. A newly blocking bomb may find an
     // actor already past that center; block re-entry without pushing it back.
@@ -82,7 +106,7 @@ function canTurn(position: Position, direction: Direction, map: CollisionMap, ra
   const x = Math.floor(position.x) + vector.x;
   const y = Math.floor(position.y) + vector.y;
   return x >= 0 && x < map.width && y >= 0 && y < map.height
-    && !map.blockers.some(wall => wall.x === x && wall.y === y)
-    && !map.blockers.some(wall => position.x + radius > wall.x && position.x - radius < wall.x + 1 && position.y + radius > wall.y && position.y - radius < wall.y + 1);
+    && !(map.collision ? map.collision.cells.has(`${x}:${y}`) : map.blockers.some(wall => wall.x === x && wall.y === y))
+    && !blockersAcross(map, position.y, 'y', radius).some(wall => overlapsCell(position, wall, radius));
 }
 
