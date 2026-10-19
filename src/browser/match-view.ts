@@ -40,6 +40,13 @@ export class MatchView {
   private readonly history: Phaser.GameObjects.Text;
   private readonly result: Phaser.GameObjects.Container;
   private readonly resultTitle: Phaser.GameObjects.Text;
+  private readonly resultActions: Phaser.GameObjects.Text;
+  private readonly title: Phaser.GameObjects.Text;
+  private readonly subtitle: Phaser.GameObjects.Text;
+  private readonly timerLabel: Phaser.GameObjects.Text;
+  private readonly keyboardHelp: Phaser.GameObjects.Text;
+  private readonly seedLabel: Phaser.GameObjects.Text;
+  private revision = -1;
   private latestChange = '';
   private consumedEvents = 0;
   private readonly feedback: ReturnType<typeof createFeedback>;
@@ -65,27 +72,47 @@ export class MatchView {
     this.normalBoard = new NormalBoard(scene, this.boardRoot, theme);
     this.feedbackGraphics = scene.add.graphics(); this.boardRoot.add(this.feedbackGraphics);
     this.actorCards = new ActorCards(scene, this.root, world, theme);
-    this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
+    this.title = this.text(24, 18, 'Fake Bomb It', 32, '#eaf3ed', '600');
     const arenaTitles = { generated: '种子地图', normal: '正常 AI 练习场', training: '实体训练场', items: '道具练习场', escape: '逃生练习场' };
-    this.text(24, 63, this.arena === 'generated' ? `1 对 ${world.actors.length - 1} · 正常难度` : `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
-    this.text(688, 18, '剩余时间', 17, '#b8d1c6');
+    this.subtitle = this.text(24, 63, this.arena === 'generated' ? `1 对 ${world.actors.length - 1} · 正常难度` : `${arenaTitles[this.arena]} · 横屏游玩`, 20, '#b8d1c6');
+    this.timerLabel = this.text(688, 18, '剩余时间', 17, '#b8d1c6');
     this.timer = this.text(688, 43, '02:00', 32, '#eaf3ed', '600');
     this.progress = this.text(386, 22, '', 22, '#eaf3ed');
     const arenaHelp = { generated: '拾取道具，炸开通路', normal: '放弹封口后向左、向下躲开', training: '炸开障碍后等待火焰消失', items: '向上、向右拾取三类道具', escape: '观察 AI 躲开连锁危险' };
     this.history = this.text(386, 58, arenaHelp[this.arena], 15, '#b8d1c6');
-    this.text(24, 553, 'WASD / 方向键移动', 14, '#b8d1c6');
+    this.keyboardHelp = this.text(24, 553, 'WASD / 方向键移动', 14, '#b8d1c6');
     const seed = world.initialization.seed;
-    this.text(242, 550, `种子 ${seed.length > 24 ? `${seed.slice(0, 23)}…` : seed}  ·  ${world.initialMap.width} × ${world.initialMap.height}`, 14, '#b8d1c6');
+    this.seedLabel = this.text(242, 550, `种子 ${seed.length > 24 ? `${seed.slice(0, 23)}…` : seed}  ·  ${world.initialMap.width} × ${world.initialMap.height}`, 14, '#b8d1c6');
     this.result = scene.add.container(0, 0).setVisible(false);
     this.root.add(this.result);
     const shade = scene.add.rectangle(512, 310, 510, 232, colors.background, 0.97).setStrokeStyle(2, colors.player);
     this.resultTitle = scene.add.text(512, 270, '', { fontFamily: font, fontSize: '34px', fontStyle: 'bold', color: '#eaf3ed' }).setOrigin(0.5);
-    const actions = scene.add.text(512, 354, '重试本局：R / 右下角\n新开一局：N / 左下角\n返回菜单：M / 右上角', { fontFamily: font, fontSize: '21px', color: '#83dfb6', align: 'center', lineSpacing: 8 }).setOrigin(0.5);
-    this.result.add([shade, this.resultTitle, actions]);
+    this.resultActions = scene.add.text(512, 354, '重试本局：R / 右下角\n新开一局：N / 左下角\n返回菜单：M / 右上角', { fontFamily: font, fontSize: '21px', color: '#83dfb6', align: 'center', lineSpacing: 8 }).setOrigin(0.5);
+    this.result.add([shade, this.resultTitle, this.resultActions]);
     this.present(world, 0, []);
   }
 
   present(world: WorldState, alpha: number, events: readonly GameplayEvent[], deltaMs = 0, animationPaused = false): void {
+    if (this.revision !== arenaLayout.revision) {
+      this.revision = arenaLayout.revision;
+      const layout = arenaLayout, area = layout.board, s = layout.cssScale;
+      const cell = Math.min(area.cell, area.width / world.initialMap.width, area.height / world.initialMap.height);
+      this.boardRoot.setPosition(area.x + (area.width - world.initialMap.width * cell) / 2, area.y + (area.height - world.initialMap.height * cell) / 2).setScale(cell / area.cell);
+      this.title.setPosition(layout.title.x, layout.title.y).setFontSize(layout.compact ? 16 / s : 32);
+      this.timer.setPosition(layout.timer.x, layout.timer.y).setFontSize(layout.compact ? 18 / s : 32);
+      this.progress.setPosition(layout.progress.x, layout.progress.y).setFontSize(layout.compact ? 12 / s : 22).setVisible(!layout.compact || layout.active);
+      this.history.setPosition(area.x + 144, 58).setVisible(!layout.compact);
+      this.timerLabel.setPosition(area.x + 446, 18).setVisible(!layout.compact);
+      this.subtitle.setVisible(!layout.compact); this.keyboardHelp.setVisible(!layout.compact);
+      this.keyboardHelp.setY(layout.height - 23); this.seedLabel.setPosition(area.x, layout.height - 26).setVisible(!layout.compact);
+      const resultScale = Math.min(1.3, (area.width - 8 / s) / 510, (area.height - 8 / s) / 232);
+      this.result.setPosition(area.x + area.width / 2 - 512 * resultScale, area.y + area.height / 2 - 310 * resultScale).setScale(resultScale);
+      this.resultTitle.setFontSize(layout.compact ? 20 / s / resultScale : 34);
+      this.resultActions.setFontSize(layout.compact ? 13 / s / resultScale : 21)
+        .setText(layout.compact ? '右侧重试本局\n左侧新开一局\n右侧返回菜单' : '重试本局：R / 右下角\n新开一局：N / 左下角\n返回菜单：M / 右上角');
+      this.scene.game.canvas.dataset.boardViewport = JSON.stringify({ x: this.boardRoot.x * s, y: this.boardRoot.y * s,
+        width: world.initialMap.width * cell * s, height: world.initialMap.height * cell * s, cell: cell * s });
+    }
     this.animationPaused = animationPaused;
     this.poses = this.skinPlayback.present(world, deltaMs, animationPaused);
     const settings = readFeedbackSettings(); this.feedback.configure(settings);

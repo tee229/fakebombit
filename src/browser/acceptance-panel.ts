@@ -2,6 +2,7 @@ import { createPerformanceRecord, type PerformanceSample } from '../diagnostics/
 import type { GameFlowState, GameRun } from '../game-flow/index.js';
 import { readFeedbackSettings } from './feedback-settings.js';
 import './acceptance.css';
+import { arenaLayout } from './layout.js';
 
 const checks = [
   ['touch', '双指移动与放弹可同时操作'], ['turn', '转弯、拖出和触摸取消没有卡住或误操作'],
@@ -83,8 +84,10 @@ export class AcceptancePanel {
     this.openButton.hidden = this.isOpen() || !['menu', 'paused', 'result'].includes(state.phase);
     if (!this.openButton.hidden) {
       const bounds = this.canvas.getBoundingClientRect(), menu = state.phase === 'menu';
-      this.openButton.style.left = `${bounds.left + bounds.width * (menu ? 100 : 512) / 1024}px`;
-      this.openButton.style.top = `${bounds.top + bounds.height * (menu ? 35 : 510) / 576}px`;
+      const menuX = arenaLayout.compact ? 64 / arenaLayout.cssScale : (arenaLayout.width - 1024) / 2 + 100;
+      const menuY = arenaLayout.compact ? 22 / arenaLayout.cssScale : (arenaLayout.height - 576) / 2 + 35;
+      this.openButton.style.left = `${bounds.left + bounds.width * (menu ? menuX : arenaLayout.report.x) / arenaLayout.width}px`;
+      this.openButton.style.top = `${bounds.top + bounds.height * (menu ? menuY : arenaLayout.report.y) / arenaLayout.height}px`;
     }
   }
   private value(selector: string): string { return this.root.querySelector<HTMLInputElement>(selector)!.value.trim(); }
@@ -98,6 +101,7 @@ export class AcceptancePanel {
       device: { model: this.value('#acceptance-device'), os: this.value('#acceptance-os'), browser: this.value('#acceptance-browser'),
         version: this.value('#acceptance-version'), userAgent: navigator.userAgent, screen: [screen.width, screen.height],
         viewport: [innerWidth, innerHeight], pixelRatio: devicePixelRatio, maxTouchPoints: navigator.maxTouchPoints },
+      presentationLayout: JSON.parse(this.canvas.dataset.viewportLayout ?? 'null'),
       criteria: { continuousMs: 60000, segmentSelection: 'longest-continuous', minimumAverageFps: 55, maximumP95FrameMs: 33, maximumFrameMs: 200, p95ResolutionMs: .1 },
       manualChecks: Object.fromEntries(checks.map(([id]) => [id, this.root.querySelector<HTMLInputElement>(`input[name="${id}"]`)!.checked])),
       notes: this.value('#acceptance-notes'), errors: [...this.errors], resources,

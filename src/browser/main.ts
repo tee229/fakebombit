@@ -9,7 +9,7 @@ import { MatchView } from './match-view.js';
 import { ThemeMenu, preloadMenu } from './theme-scene.js';
 import { resultLabels } from './result-labels.js';
 import { CanvasControls } from './canvas-controls.js';
-import { arenaLayout } from './layout.js';
+import { arenaLayout, updateArenaLayout } from './layout.js';
 import { preloadFeedbackAudio } from './feedback-audio.js';
 import { AcceptancePanel } from './acceptance-panel.js';
 import './style.css';
@@ -20,7 +20,7 @@ class GameScene extends Phaser.Scene {
   private menu: ThemeMenu | undefined;
   private acceptance: AcceptancePanel | undefined;
   private arena: Arena = 'generated';
-  private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
+  private live: { id: number; view: MatchView; controls: CanvasControls; reflow(): void; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
   preload(): void { preloadMenu(this); preloadFeedbackAudio(this); }
   create(): void {
@@ -36,7 +36,15 @@ class GameScene extends Phaser.Scene {
     canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-describedby', 'instructions'); canvas.focus({ preventScroll: true });
     const background = () => { this.acceptance?.interrupt(); this.flow?.pause('background'); };
     const visibility = () => { if (document.visibilityState === 'hidden') background(); };
-    const resize = () => this.live?.controls.clear();
+    const resize = () => {
+      const bounds = document.getElementById('game')!.getBoundingClientRect();
+      viewportWidth = bounds.width; viewportHeight = bounds.height;
+      if (updateArenaLayout(viewportWidth, viewportHeight, this.flow?.read().phase === 'playing')) {
+        this.live?.controls.clear();
+        this.scale.getParentBounds(); this.scale.setGameSize(arenaLayout.width, arenaLayout.height);
+      }
+    };
+    const viewportObserver = new ResizeObserver(resize); viewportObserver.observe(document.getElementById('game')!);
     window.addEventListener('blur', background); window.addEventListener('pagehide', background);
     window.addEventListener('resize', resize); document.addEventListener('visibilitychange', visibility);
     let disposed = false;
@@ -46,6 +54,7 @@ class GameScene extends Phaser.Scene {
       this.acceptance?.dispose(); this.acceptance = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
       window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', visibility);
+      viewportObserver.disconnect();
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
     };
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
@@ -73,6 +82,7 @@ class GameScene extends Phaser.Scene {
       controls = new CanvasControls(this, input, {
         pause: () => { flow.pause(); }, resume: () => this.resume(), retry: () => { void flow.retry(); },
         newMatch: () => { flow.newMatch(); }, menu: () => { flow.returnToMenu(); },
+        fullscreen: () => this.fullscreen(),
       });
       controls.present(run.frame, input.readTouch());
       const toggle = this.add.rectangle(300, 34, 108, 64, 0x24483f).setStrokeStyle(1, 0x83dfb6).setInteractive({ useHandCursor: true });
@@ -88,6 +98,7 @@ class GameScene extends Phaser.Scene {
         else if (event.code === 'KeyN') { event.preventDefault(); if (!event.repeat) flow.newMatch(); }
         else if (event.code === 'KeyR') { event.preventDefault(); if (!event.repeat) void flow.retry(); }
         else if (event.code === 'KeyV') { event.preventDefault(); if (!event.repeat) switchView(); }
+        else if (event.code === 'KeyF') { event.preventDefault(); if (!event.repeat) this.fullscreen(); }
         else if (event.code === 'Escape' || event.code === 'KeyP' || (event.code === 'Enter' && phase === 'paused')) {
           event.preventDefault(); if (!event.repeat) { if (phase === 'paused') this.resume(); else flow.pause(); }
         } else if (phase === 'playing' && input.keyDown(event.code, event.repeat)) event.preventDefault();
@@ -95,7 +106,15 @@ class GameScene extends Phaser.Scene {
       const keyUp = (event: KeyboardEvent) => { if (input.keyUp(event.code)) event.preventDefault(); };
       window.addEventListener('keydown', keyDown); detach.push(() => window.removeEventListener('keydown', keyDown));
       window.addEventListener('keyup', keyUp); detach.push(() => window.removeEventListener('keyup', keyUp));
-      this.live = { id: run.id, view, controls, listenerCount: () => detach.length, lastResult: '' };
+      let extrasRevision = -1;
+      this.live = { id: run.id, view, controls, reflow: () => {
+        if (extrasRevision === arenaLayout.revision) return;
+        extrasRevision = arenaLayout.revision;
+        const layout = arenaLayout, button = layout.switchView;
+        const visible = !layout.compact || !layout.active;
+        toggle.setPosition(button.x, button.y).setSize(button.width, button.height).setVisible(visible);
+        toggleLabel.setPosition(button.x, button.y).setFontSize(layout.compact ? 14 / layout.cssScale : 17).setVisible(visible);
+      }, listenerCount: () => detach.length, lastResult: '' };
       const world = run.frame.world;
       canvas.dataset.seed = world.initialization.seed; canvas.dataset.map = JSON.stringify(world.initialMap.blockers);
       canvas.dataset.mapWidth = String(world.initialMap.width); canvas.dataset.mapHeight = String(world.initialMap.height);
@@ -115,6 +134,10 @@ class GameScene extends Phaser.Scene {
   }
 
   private resume(): void { if (document.visibilityState !== 'hidden' && document.hasFocus()) this.flow?.resume(); }
+  private fullscreen(): void {
+    const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+    void action.catch(() => this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'));
+  }
   private status(message: string): void { const status = document.getElementById('game-status'); if (status) status.textContent = message; }
   update(): void {
     if (!this.flow) return;
@@ -123,7 +146,9 @@ class GameScene extends Phaser.Scene {
     if (document.visibilityState === 'hidden') this.flow.pause('background');
     const state = this.flow.advanceFrame(this.game.loop.rawDelta);
     const logicDoneAt = this.acceptance ? performance.now() : 0;
+    updateArenaLayout(viewportWidth, viewportHeight, state.phase === 'playing');
     this.menu?.present(state);
+    this.live?.reflow();
     const { run } = state;
     if (run && this.live) {
       const { frame } = run, world = frame.world;
@@ -146,6 +171,13 @@ class GameScene extends Phaser.Scene {
     }
     // Read-only lifecycle diagnostics, derived from currently owned engine objects/listeners.
     const canvas = this.game.canvas;
+    if (canvas.dataset.layoutRevision !== String(arenaLayout.revision)) {
+      canvas.dataset.layoutRevision = String(arenaLayout.revision);
+      const s = arenaLayout.cssScale;
+      const circle = (shape: { x: number; y: number; radius: number }) => ({ x: shape.x * s, y: shape.y * s, radius: shape.radius * s });
+      canvas.dataset.viewportLayout = JSON.stringify({ width: viewportWidth, height: viewportHeight, compact: arenaLayout.compact,
+        joystick: circle(arenaLayout.joystick), bomb: circle(arenaLayout.bomb) });
+    }
     canvas.dataset.flowPhase = state.phase; canvas.dataset.runId = String(run?.id ?? '');
     canvas.dataset.runListeners = String(this.live?.listenerCount() ?? 0);
     canvas.dataset.sceneObjects = String(this.children.list.length); canvas.dataset.textures = String(this.textures.getTextureKeys().length);
@@ -167,6 +199,9 @@ class GameScene extends Phaser.Scene {
 const fpsParameter = new URLSearchParams(window.location.search).get('fps');
 const requestedFps = Number(fpsParameter);
 const renderFps = [30, 60, 120].includes(requestedFps) ? requestedFps : 60;
+const initialViewport = document.getElementById('game')!.getBoundingClientRect();
+let viewportWidth = initialViewport.width, viewportHeight = initialViewport.height;
+updateArenaLayout(viewportWidth, viewportHeight);
 const game = new Phaser.Game({
   type: Phaser.AUTO, parent: 'game', backgroundColor: '#102b2c', width: arenaLayout.width, height: arenaLayout.height,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },

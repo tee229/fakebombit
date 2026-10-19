@@ -5,6 +5,7 @@ import { builtinSkins } from '../resources/builtin-skins.js';
 import type { GameFlow, GameFlowState } from '../game-flow/index.js';
 import { diagnosticPackage } from './app-resources.js';
 import { readFeedbackSettings, feedbackLabels, cycleParticles, cycleVolume } from './feedback-settings.js';
+import { arenaLayout } from './layout.js';
 
 const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
 
@@ -44,16 +45,17 @@ export class ThemeMenu {
     const text = this.scene.add.text(x, y, value, { fontFamily: font, fontSize: `${size}px`, color, align: 'center' }).setOrigin(0.5);
     this.content!.add(text); return text;
   }
-  private button(x: number, y: number, width: number, label: string, action: () => void): void {
-    const shape = this.scene.add.rectangle(x, y, width, 58, 0x83dfb6).setStrokeStyle(2, 0xa2edce).setInteractive({ useHandCursor: true });
-    shape.on('pointerup', action); this.content!.add(shape); this.text(x, y, label, 22, '#102b2c');
+  private button(x: number, y: number, width: number, label: string, action: () => void, height = 58, size = 22): void {
+    const shape = this.scene.add.rectangle(x, y, width, height, 0x83dfb6).setStrokeStyle(2, 0xa2edce).setInteractive({ useHandCursor: true });
+    shape.on('pointerup', action); this.content!.add(shape); this.text(x, y, label, size, '#102b2c');
   }
   hide(): void { this.content?.destroy(true); this.content = undefined; this.rendered = ''; this.note = ''; }
   present(state: GameFlowState<HTMLImageElement>): void {
     if (state.run || state.phase === 'disposed') { if (this.content) this.hide(); return; }
-    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings()]);
+    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings(), arenaLayout.width, arenaLayout.height, arenaLayout.cssScale, arenaLayout.compact]);
     if (key === this.rendered) return;
     this.content?.destroy(true); this.content = this.scene.add.container(); this.rendered = key;
+    if (!arenaLayout.compact || state.phase !== 'menu') this.content.setPosition((arenaLayout.width - 1024) / 2, (arenaLayout.height - 576) / 2);
     const canvas = this.scene.game.canvas;
     for (const name of Object.keys(canvas.dataset)) delete canvas.dataset[name];
     canvas.dataset.phase = state.phase === 'menu' ? 'selecting' : state.phase;
@@ -76,6 +78,7 @@ export class ThemeMenu {
     canvas.setAttribute('aria-label', state.phase === 'menu' ? '左右选地图主题，上下选角色皮肤，Enter 开始' : state.phase === 'preparing' ? '正在准备资源，Escape 取消' : '准备失败，Enter 重试，Escape 返回菜单');
   }
   private showSelection(): void {
+    if (arenaLayout.compact) { this.showCompactSelection(); return; }
     this.text(512, 35, 'Fake Bomb It', 32); this.text(512, 75, '选择地图主题和角色皮肤', 23, '#b8d1c6');
     builtinThemes.forEach((theme, index) => {
       const x = index === 0 ? 290 : 734, selected = theme.id === this.theme().id;
@@ -99,6 +102,32 @@ export class ThemeMenu {
     this.button(858, 501, 232, settings.particles, cycleParticles);
     this.text(512, 552, this.note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, '#b8d1c6');
     this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。左右选主题，上下选皮肤，Enter 或点击开始。`);
+  }
+  private showCompactSelection(): void {
+    const s = arenaLayout.cssScale, width = arenaLayout.width * s, height = arenaLayout.height * s;
+    const text = (x: number, y: number, value: string, size: number, color = '#eaf3ed') => this.text(x / s, y / s, value, size / s, color);
+    text(width / 2, 22, 'Fake Bomb It · 选择外观', 17);
+    builtinThemes.forEach((theme, index) => {
+      const x = width * (index === 0 ? .25 : .75), selected = theme.id === this.theme().id;
+      const panel = this.scene.add.rectangle(x / s, 78 / s, (width / 2 - 24) / s, 68 / s, selected ? 0x24483f : 0x173737)
+        .setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      panel.on('pointerup', () => this.choose(theme, this.skin())); this.content!.add(panel);
+      if (this.scene.textures.exists(`preview:${theme.id}`)) this.content!.add(this.scene.add.image((x - 65) / s, 78 / s, `preview:${theme.id}`).setDisplaySize(82 / s, 50 / s));
+      text(x + 42, 78, `${selected ? '● ' : ''}${theme.label}`, 17, selected ? '#83dfb6' : '#eaf3ed');
+    });
+    builtinSkins.forEach((skin, index) => {
+      const x = width * (index === 0 ? .25 : .75), selected = skin.id === this.skin().id;
+      const panel = this.scene.add.rectangle(x / s, 148 / s, (width / 2 - 24) / s, 44 / s, selected ? 0x24483f : 0x173737)
+        .setStrokeStyle(selected ? 3 : 1, selected ? 0x83dfb6 : 0x496562).setInteractive({ useHandCursor: true });
+      panel.on('pointerup', () => this.choose(this.theme(), skin)); this.content!.add(panel);
+      if (this.scene.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.scene.add.image((x - 62) / s, 148 / s, `skin-preview:${skin.id}`).setDisplaySize(36 / s, 36 / s));
+      text(x + 24, 148, `${selected ? '● ' : ''}${skin.label}`, 15, selected ? '#83dfb6' : '#eaf3ed');
+    });
+    const settings = feedbackLabels(), y = (height - 30) / s;
+    this.button(width / 2 / s, y, 200 / s, `开始 · ${this.skin().label}`, () => { void this.flow.start(); }, 44 / s, 16 / s);
+    this.button(96 / s, y, 168 / s, settings.volume, cycleVolume, 44 / s, 14 / s);
+    this.button((width - 96) / s, y, 168 / s, settings.particles, cycleParticles, 44 / s, 14 / s);
+    this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。点击主题或皮肤选择，点击开始。`);
   }
   private status(message: string): void { const status = document.getElementById('game-status'); if (status) status.textContent = message; }
   destroy(): void { this.hide(); window.removeEventListener('keydown', this.keyDown); }
