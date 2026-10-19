@@ -60,7 +60,10 @@ export function createPerformanceRecord() {
         }
         active = false; previousUpdate = undefined; return;
       }
-      if (value.intervalMs === 0) return;
+      if (value.intervalMs === 0) {
+        if (active) previousUpdate = updateEvidence(value);
+        return;
+      }
       const currentUpdate = updateEvidence(value);
       if (!active) { active = true; excludedBoundaries++; previousUpdate = currentUpdate; return; }
       frames++; foregroundMs += value.intervalMs; segmentFrames++; segmentMs += value.intervalMs;

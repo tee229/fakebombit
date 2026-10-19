@@ -111,3 +111,12 @@ test('update evidence owns its counters and rejects invalid ticks without changi
   expect(Object.isFrozen(before.longFrames[0])).toBe(true);
   expect(Object.isFrozen(before.longFrames[0]?.currentUpdate)).toBe(true);
 });
+
+test('a zero interval excludes elapsed time but preserves the immediately preceding update evidence', () => {
+  const record = createPerformanceRecord();
+  record.sample({ ...frame, tick: 1 });
+  record.sample({ ...frame, tick: 2, intervalMs: 0, presentationMs: 180 });
+  record.sample({ ...frame, tick: 3, intervalMs: 208 });
+  expect(record.read()).toMatchObject({ frames: 1, foregroundMs: 208, longFrameCount: 1,
+    longFrames: [{ previousUpdate: { tick: 2, presentationMs: 180 }, currentUpdate: { tick: 3 } }] });
+});
