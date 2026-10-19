@@ -186,7 +186,7 @@ class GameScene extends Phaser.Scene {
     if (this.acceptance) {
       const world = run?.frame.world;
       const countObjects = (objects: readonly Phaser.GameObjects.GameObject[]): number => objects.reduce((sum, object) => sum + 1 + (object instanceof Phaser.GameObjects.Container ? countObjects(object.list) : 0), 0);
-      this.acceptance.frame(state, { active: measuringPlay, intervalMs: this.game.loop.rawDelta,
+      this.acceptance.frame(state, { tick: world?.tick ?? 0, active: measuringPlay, intervalMs: this.game.loop.rawDelta,
         logicMs: logicDoneAt - measuredAt, presentationMs: performance.now() - logicDoneAt,
         steps: run?.frame.steps ?? 0, droppedTimeMs: run?.frame.droppedTimeMs ?? 0,
         counters: { particles: Number(canvas.dataset.feedbackParticles ?? 0), sounds: this.sound.getAll('').length,

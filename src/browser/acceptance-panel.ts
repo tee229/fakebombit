@@ -73,7 +73,7 @@ export class AcceptancePanel {
   }
   endRun(id: number): void { if (this.current?.id === id) { this.current.ended = true; this.interrupt(); this.current = undefined; } }
   interrupt(): void {
-    this.current?.metrics.sample({ active: false, intervalMs: 0, logicMs: 0, presentationMs: 0, steps: 0, droppedTimeMs: 0,
+    this.current?.metrics.sample({ tick: 0, active: false, intervalMs: 0, logicMs: 0, presentationMs: 0, steps: 0, droppedTimeMs: 0,
       counters: { particles: 0, sounds: 0, textures: 0, objects: 0, bombs: 0, hazardCells: 0, aiSearchStates: 0 } });
   }
   isOpen(): boolean { return !this.root.hidden; }

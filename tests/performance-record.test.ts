@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { createPerformanceRecord } from '../src/diagnostics/performance-record.js';
 
-const frame = { active: true, intervalMs: 20, logicMs: 2, presentationMs: 3, steps: 1, droppedTimeMs: 0,
+const frame = { tick: 0, active: true, intervalMs: 20, logicMs: 2, presentationMs: 3, steps: 1, droppedTimeMs: 0,
   counters: { particles: 20, sounds: 2, textures: 60, objects: 320, bombs: 2, hazardCells: 7, aiSearchStates: 100 } };
 
 test('foreground frame statistics use elapsed time and exclude the first interval after entering play', () => {
@@ -65,4 +65,49 @@ test('percentiles use nearest rank rounded up to 0.1 ms, and zero intervals do n
   for (let i = 0; i < 19; i++) record.sample({ ...frame, intervalMs: 16.01 });
   record.sample({ ...frame, intervalMs: 90 }); record.sample({ ...frame, intervalMs: 0 });
   expect(record.read()).toMatchObject({ frames: 20, p95FrameMs: 16.1, maxFrameMs: 90 });
+});
+
+test('long frame evidence pairs an interval with the preceding and current updates', () => {
+  const record = createPerformanceRecord();
+  record.sample({ ...frame, tick: 1, logicMs: 180 });
+  record.sample({ ...frame, tick: 6, intervalMs: 208, logicMs: 8, steps: 5, droppedTimeMs: 100 });
+  expect(record.read().longFrames).toEqual([{
+    frame: 1, segment: 1, segmentFrame: 1, foregroundMs: 208, intervalMs: 208,
+    previousUpdate: { tick: 1, logicMs: 180, presentationMs: 3, steps: 1, droppedTimeMs: 0, counters: frame.counters },
+    currentUpdate: { tick: 6, logicMs: 8, presentationMs: 3, steps: 5, droppedTimeMs: 100, counters: frame.counters },
+  }]);
+});
+
+test('long frame evidence excludes pause boundaries and retains only the twenty largest intervals', () => {
+  const record = createPerformanceRecord(); record.sample(frame);
+  record.sample({ ...frame, tick: 1, intervalMs: 250 });
+  const before = record.read();
+  record.sample({ ...frame, active: false, intervalMs: 60000 });
+  record.sample({ ...frame, tick: 10, intervalMs: 60000 });
+  record.sample({ ...frame, tick: 11, intervalMs: 0, logicMs: 999 });
+  record.sample({ ...frame, tick: 12, intervalMs: 33 });
+  for (let i = 0; i < 25; i++) record.sample({ ...frame, tick: 13 + i, intervalMs: 34 + i });
+  const after = record.read();
+  expect(after).toMatchObject({ longFrameCount: 26, stuttersOver200Ms: 1, maxFrameMs: 250, excludedBoundaries: 2 });
+  expect(after.longFrames).toHaveLength(20);
+  expect(after.longFrames.map(value => value.intervalMs)).toEqual([250, 58, 57, 56, 55, 54, 53, 52, 51, 50, 49, 48, 47, 46, 45, 44, 43, 42, 41, 40]);
+  expect(after.longFrames.at(-1)).toMatchObject({ segment: 2, segmentFrame: 8, previousUpdate: { tick: 18 }, currentUpdate: { tick: 19 } });
+  expect(before.longFrames).toHaveLength(1);
+  expect(Object.isFrozen(before.longFrames)).toBe(true);
+  expect(Object.isFrozen(before.longFrames[0]?.previousUpdate.counters)).toBe(true);
+});
+
+test('update evidence owns its counters and rejects invalid ticks without changing the record', () => {
+  const record = createPerformanceRecord(), counters = { ...frame.counters };
+  record.sample({ ...frame, counters });
+  counters.bombs = 9;
+  record.sample({ ...frame, tick: 1, intervalMs: 201 });
+  const before = record.read();
+  expect(before.longFrames[0]?.previousUpdate.counters.bombs).toBe(2);
+  for (const tick of [-1, .5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(() => record.sample({ ...frame, tick, intervalMs: 300 })).toThrow(RangeError);
+    expect(record.read()).toEqual(before);
+  }
+  expect(Object.isFrozen(before.longFrames[0])).toBe(true);
+  expect(Object.isFrozen(before.longFrames[0]?.currentUpdate)).toBe(true);
 });

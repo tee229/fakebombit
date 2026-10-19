@@ -1,5 +1,7 @@
 # Fake Bomb It
 
+首版实施进度 **13/15**；当前为 #16 手机浏览器体验与性能验收，#17 微信小游戏适配等待浏览器验收通过。完整已完成项与剩余清单见[实施进度](docs/implementation-status.md)。
+
 Issues #3–#11 implement headless movement, bombs, power-ups, normal AI battles and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
 ## Run

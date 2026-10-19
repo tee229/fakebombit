@@ -3,8 +3,20 @@ export interface PerformanceCounters {
   readonly bombs: number; readonly hazardCells: number; readonly aiSearchStates: number;
 }
 export interface PerformanceSample {
+  readonly tick: number;
   readonly active: boolean; readonly intervalMs: number; readonly logicMs: number; readonly presentationMs: number;
   readonly steps: number; readonly droppedTimeMs: number; readonly counters: PerformanceCounters;
+}
+
+type UpdateEvidence = Readonly<Pick<PerformanceSample, 'tick' | 'logicMs' | 'presentationMs' | 'steps' | 'droppedTimeMs' | 'counters'>>;
+interface LongFrameEvidence {
+  readonly frame: number; readonly segment: number; readonly segmentFrame: number; readonly foregroundMs: number;
+  readonly intervalMs: number; readonly previousUpdate: UpdateEvidence; readonly currentUpdate: UpdateEvidence;
+}
+
+function updateEvidence(value: PerformanceSample): UpdateEvidence {
+  return Object.freeze({ tick: value.tick, logicMs: value.logicMs, presentationMs: value.presentationMs,
+    steps: value.steps, droppedTimeMs: value.droppedTimeMs, counters: Object.freeze({ ...value.counters }) });
 }
 
 function percentile95(histogram: Uint32Array, frames: number, maximum: number): number | null {
@@ -21,6 +33,9 @@ export function createPerformanceRecord() {
   let active = false, frames = 0, foregroundMs = 0, excludedBoundaries = 0;
   let logicMs = 0, presentationMs = 0, maxFrameMs = 0;
   let stuttersOver200Ms = 0;
+  let longFrameCount = 0;
+  const longFrames: LongFrameEvidence[] = [];
+  let previousUpdate: UpdateEvidence | undefined;
   let maxSteps = 0, droppedTimeMs = 0, maxLogicMs = 0, maxPresentationMs = 0;
   const peaks: PerformanceCounters = { particles: 0, sounds: 0, textures: 0, objects: 0, bombs: 0, hazardCells: 0, aiSearchStates: 0 };
   let peakValues = peaks;
@@ -34,6 +49,7 @@ export function createPerformanceRecord() {
   let longestCompleted = readSegment();
   return {
     sample(value: PerformanceSample) {
+      if (!Number.isSafeInteger(value.tick) || value.tick < 0) throw new RangeError('Performance tick must be a nonnegative safe integer');
       for (const number of [value.intervalMs, value.logicMs, value.presentationMs, value.steps, value.droppedTimeMs, ...Object.values(value.counters)]) {
         if (!Number.isFinite(number) || number < 0) throw new RangeError('Performance samples must be finite and nonnegative');
       }
@@ -42,11 +58,21 @@ export function createPerformanceRecord() {
           if (segmentMs >= longestCompleted.foregroundMs) longestCompleted = readSegment();
           segmentFrames = 0; segmentMs = 0; segmentMaxFrameMs = 0; segmentStutters = 0; segmentHistogram.fill(0);
         }
-        active = false; return;
+        active = false; previousUpdate = undefined; return;
       }
       if (value.intervalMs === 0) return;
-      if (!active) { active = true; excludedBoundaries++; return; }
+      const currentUpdate = updateEvidence(value);
+      if (!active) { active = true; excludedBoundaries++; previousUpdate = currentUpdate; return; }
       frames++; foregroundMs += value.intervalMs; segmentFrames++; segmentMs += value.intervalMs;
+      // The interval ends at this update; the preceding update may have caused it.
+      if (value.intervalMs > 33) {
+        longFrameCount++;
+        longFrames.push(Object.freeze({ frame: frames, segment: excludedBoundaries, segmentFrame: segmentFrames,
+          foregroundMs, intervalMs: value.intervalMs, previousUpdate: previousUpdate!, currentUpdate }));
+        longFrames.sort((a, b) => b.intervalMs - a.intervalMs || a.frame - b.frame);
+        if (longFrames.length > 20) longFrames.pop();
+      }
+      previousUpdate = currentUpdate;
       segmentMaxFrameMs = Math.max(segmentMaxFrameMs, value.intervalMs);
       if (value.intervalMs > 200) segmentStutters++;
       logicMs += value.logicMs; presentationMs += value.presentationMs;
@@ -68,6 +94,7 @@ export function createPerformanceRecord() {
       const verdict = qualification.foregroundMs < 60000 ? 'insufficient'
         : qualification.averageFps! >= 55 && qualification.p95FrameMs! <= 33 && qualification.maxFrameMs <= 200 ? 'pass' : 'fail';
       return Object.freeze({ frames, foregroundMs, longestSegmentMs: qualification.foregroundMs, qualification,
+        longFrameCount, longFrames: Object.freeze([...longFrames]),
         excludedBoundaries, averageFps, stuttersOver200Ms,
         maxSteps, droppedTimeMs, maxLogicMs, maxPresentationMs, peaks: Object.freeze({ ...peakValues }),
         p95FrameMs, maxFrameMs, averageLogicMs: frames ? logicMs / frames : null,
