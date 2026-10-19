@@ -1,5 +1,6 @@
 import { appearance, toggleAppearance } from './appearance.js';
 import { cycleParticles, cycleVolume, feedbackLabels } from './feedback-settings.js';
+import type { GameFlowState } from '../game-flow/index.js';
 
 const paths = {
   pause: '<path d="M8 5v14M16 5v14"/>',
@@ -57,11 +58,11 @@ export class GameToolbar {
   private refresh(): void { const labels = feedbackLabels(); this.volume.textContent = labels.volume; this.particles.textContent = labels.particles; }
   private open(): void { this.commands.pause(); this.refresh(); this.dialog.showModal(); }
   private close(): void { this.dialog.close(); }
-  present(phase: string, view: string, blocked: boolean): void {
+  present(phase: GameFlowState<unknown>['phase'], view: string, blocked: boolean): void {
     this.playing = phase === 'playing';
     const key = `${phase}:${view}:${blocked}:${appearance().mode}:${Boolean(document.fullscreenElement)}`;
     if (key === this.stateKey) return; this.stateKey = key;
-    const run = ['playing', 'paused', 'ended'].includes(phase);
+    const run = phase === 'playing' || phase === 'paused' || phase === 'result';
     this.root.hidden = !run || blocked;
     if (!run && this.dialog.open) this.close();
     const full = Boolean(document.fullscreenElement), light = appearance().mode === 'light', entities = view === 'entities';
@@ -71,7 +72,7 @@ export class GameToolbar {
     items.forEach(([name, label], index) => { const button = this.buttons[index]!;
       button.innerHTML = icon(name); button.setAttribute('aria-label', label); button.title = label;
     });
-    this.buttons[0]!.disabled = phase === 'ended';
+    this.buttons[0]!.disabled = phase === 'result';
     this.buttons[1]!.setAttribute('aria-pressed', String(full));
     this.buttons[3]!.setAttribute('aria-pressed', String(light));
     this.buttons[4]!.setAttribute('aria-pressed', String(entities));

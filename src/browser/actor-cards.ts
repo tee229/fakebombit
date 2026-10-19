@@ -70,8 +70,9 @@ export class ActorCards {
       const card = this.cards.get(actor.id)!;
       const identity = actorIdentity(world, actor);
       if (appearanceChanged) {
-        card.background.setFillStyle(identity.player ? palette.selected : palette.surface).setStrokeStyle(identity.player ? 2 : 1, palette.mode === 'light' ? palette.border : identity.color);
-        card.name.setColor(hex(palette.mode === 'light' ? palette.ink : identity.color));
+        const accent = palette.mode === 'light' ? identity.lightColor : identity.color;
+        card.background.setFillStyle(identity.player ? palette.selected : palette.surface).setStrokeStyle(identity.player ? 2 : 1, accent);
+        card.name.setColor(hex(accent));
         for (const caption of card.captions) caption.setColor(hex(palette.muted));
       }
       const bombs = world.bombs.filter(bomb => bomb.ownerId === actor.id).length;

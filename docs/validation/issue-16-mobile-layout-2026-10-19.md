@@ -77,6 +77,17 @@ Chrome报告 `fakebombit-device-acceptance (1).json`，时间22:04:47（Asia/Sha
 
 浏览器实际检查涵盖：五按钮同排且命中区44 px、打开/关闭设置、修改声音和粒子、设置内R键未改变run/tick、关闭后仍暂停、继续、实体层往返、明暗往返、刷新后明暗记忆、设置返回菜单、原生点击放弹与拖动摇杆。设置测试中tick保持702，run保持1；主操作检查玩家x到1.750，炸弹计数1，松开后摇杆方向清空。模拟视口751×247、751×304、640×360和1280×720；确认轮核对载入最新正式JS。浏览器模拟不能代替手机双指或全屏进出验收。
 
-`pnpm check`：303项测试/18文件、三个类型检查、架构检查及正式构建通过。布局收尾与配色缓存后浏览器类型检查和正式重建通过；机械UI扫描结果[]。最终JS `index-tnfS87HF.js`，SHA-256 `142bca8c0a5285be0ee02f621fdb90f03744b11ab1a3db3df99dd7216b1d15f5`；CSS `index-3yfWmR9R.css`。截图存放于忽略目录`.scratch/issue-16-toolbar-final.jpg`、`issue-16-toolbar-light.jpg`、`issue-16-toolbar-settings.jpg`、`issue-16-toolbar-640-final.jpg`。
+`pnpm check`：303项测试/18文件、三个类型检查、架构检查及正式构建通过。布局收尾与配色缓存后浏览器类型检查和正式重建通过；机械UI扫描结果[]。复核前JS `index-tnfS87HF.js`，SHA-256 `142bca8c0a5285be0ee02f621fdb90f03744b11ab1a3db3df99dd7216b1d15f5`；CSS `index-3yfWmR9R.css`。截图存放于忽略目录`.scratch/issue-16-toolbar-final.jpg`、`issue-16-toolbar-light.jpg`、`issue-16-toolbar-settings.jpg`、`issue-16-toolbar-640-final.jpg`。
 
 该追加需求仍属于#16体验修正；三浏览器新版实机复测和首局长帧排查继续待完成，不改变旧报告的适用版本或项目完成计数。
+
+
+### 追加需求 Standards 复核
+
+固定点仍为05b4a4a，本轮重点42f731f...f28778a。发现1项P2流程契约问题：工具栏把GameFlowState的result混同为内部GameFrame的ended，导致结果页工具栏隐藏；依据docs/game-flow.md应使用result。已改为result，并将参数收紧为GameFlowState的phase类型。额外异味0项。
+
+### 追加需求 Spec 复核
+
+发现1项P2结果页工具栏缺失，与上述为同一问题。已修正；通过真实放弹、站在原地被炸淘汰进入result/lost，确认整排仍显示、仅继续按钮禁用，设置可打开并可返回菜单。截图`.scratch/issue-16-toolbar-result.jpg`。其余五图标、模态设置、明暗切换、实体视图、完整地图与大控件需求未发现遗漏或额外范围。
+
+两轴各发现1项、对应同一缺陷，均已修复。修复后浏览器类型检查与正式重建通过；最终JS `index-CreBInqE.js`，CSS仍为`index-3yfWmR9R.css`。新版实机验收保持待完成。
