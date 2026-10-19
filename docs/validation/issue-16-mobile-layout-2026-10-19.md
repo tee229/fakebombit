@@ -91,3 +91,5 @@ Chrome报告 `fakebombit-device-acceptance (1).json`，时间22:04:47（Asia/Sha
 发现1项P2结果页工具栏缺失，与上述为同一问题。已修正；通过真实放弹、站在原地被炸淘汰进入result/lost，确认整排仍显示、仅继续按钮禁用，设置可打开并可返回菜单。截图`.scratch/issue-16-toolbar-result.jpg`。其余五图标、模态设置、明暗切换、实体视图、完整地图与大控件需求未发现遗漏或额外范围。
 
 两轴各发现1项、对应同一缺陷，均已修复。修复后浏览器类型检查与正式重建通过；最终JS `index-CreBInqE.js`，CSS仍为`index-3yfWmR9R.css`。新版实机验收保持待完成。
+
+修复提交`e3b8161`已由两位审查代理分别复核，Standards遗留0项，Spec遗留0项。最终JS SHA-256 `c05b668c811c6e3f3fe92f83de6dc0851930126d0d5e71e295568ba450a150ee`。
