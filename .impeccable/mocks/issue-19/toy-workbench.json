@@ -6,9 +6,12 @@
     "D:\\Projects\\GPTProjects\\fbi\\.scratch\\issue-16-toolbar-light.jpg"
   ],
   "approved": false,
-  "status": "generation-retry",
+  "status": "generated",
   "mode": "builtin-image-gen",
   "currentDate": "2026-10-20",
   "attempts": 3,
-  "previousFailures": "Two built-in requests failed with network errors; the third request uses a shorter structure-led prompt with the same confirmed constraints."
+  "previousFailures": "Two built-in requests failed with network errors; the third request uses a shorter structure-led prompt with the same confirmed constraints.",
+  "image": "toy-workbench.png",
+  "displayOrder": 3,
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a154ca-1e33-73e1-9441-75ab47e3f0f3\\exec-3f251dde-087f-4b91-8716-73fff45eda83.png"
 }
