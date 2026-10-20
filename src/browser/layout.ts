@@ -1,3 +1,11 @@
+import { controlRevision, readControlPreferences, type MarginName } from './control-preferences.js';
+
+export const controlGeometry = {
+  defaults: { joystickLeft: 12, joystickBottom: 8, bombRight: 12, bombBottom: 8 },
+  actual: { joystickLeft: 12, joystickBottom: 8, bombRight: 12, bombBottom: 8 },
+  maximum: { joystickLeft: 24, joystickBottom: 150, bombRight: 24, bombBottom: 150 },
+  floatingArea: { left: 0, top: 100, right: 152, bottom: 360 },
+};
 export const arenaLayout = {
   width: 1024, height: 576,
   cssScale: 1, compact: false, active: true, revision: 0,
@@ -22,7 +30,7 @@ let previous = '';
  * space on the thumb zones instead of putting the entire 16:9 screen in a box. */
 export function updateArenaLayout(viewportWidth: number, viewportHeight: number, active = true): boolean {
   if (!(viewportWidth > 0 && viewportHeight > 0)) return false;
-  const key = `${viewportWidth}:${viewportHeight}:${active}`;
+  const key = `${viewportWidth}:${viewportHeight}:${active}:${controlRevision()}`;
   if (key === previous) return false;
   previous = key;
   const s = Math.min(viewportWidth / 1024, viewportHeight / 576);
@@ -41,7 +49,7 @@ export function updateArenaLayout(viewportWidth: number, viewportHeight: number,
     Object.assign(arenaLayout.board, { x: leftWing / s, y: (belowToolbar ? 52 : 8) / s,
       width: (viewportWidth - leftWing - rightWing) / s, height: (viewportHeight - (belowToolbar ? 60 : 16)) / s });
     Object.assign(arenaLayout.actorCards, { left: 12 / s, right: (viewportWidth - rightWing + 12) / s,
-      top: 32 / s, rightTop: 48 / s, width: (Math.min(leftWing, rightWing) - 24) / s, height: 28 / s, gap: 4 / s });
+      top: 32 / s, rightTop: 52 / s, width: (Math.min(leftWing, rightWing) - 24) / s, height: 28 / s, gap: 4 / s });
     Object.assign(arenaLayout.joystick, { x: 76 / s, y: (viewportHeight - 72) / s, radius: 64 / s });
     Object.assign(arenaLayout.bomb, { x: (viewportWidth - 76) / s, y: (viewportHeight - 72) / s, radius: 64 / s });
     rectangle(arenaLayout.menu, (viewportWidth - rightWing / 2) / s, (viewportHeight - 78) / s, 96 / s, 44 / s);
@@ -70,5 +78,24 @@ export function updateArenaLayout(viewportWidth: number, viewportHeight: number,
     point(arenaLayout.progress, arenaLayout.board.x + 144, 22);
     point(arenaLayout.pauseTitle, width / 2, height / 2 - 34); point(arenaLayout.pauseMessage, width / 2, height / 2 + 10);
   }
+  const p = readControlPreferences();
+  const cards = arenaLayout.actorCards;
+  const place = (control: 'joystick' | 'bomb', side: 'joystickLeft' | 'bombRight', bottom: 'joystickBottom' | 'bombBottom') => {
+    const shape = arenaLayout[control], radius = shape.radius * s;
+    const sideWidth = control === 'joystick' ? arenaLayout.board.x * s : viewportWidth - (arenaLayout.board.x + arenaLayout.board.width) * s;
+    const cardTop = control === 'joystick' ? cards.top : cards.rightTop;
+    const top = Math.min((cardTop + cards.height * 2 + cards.gap) * s + 4, viewportHeight - radius * 2);
+    const defaultSide = (control === 'joystick' ? shape.x : width - shape.x) * s - radius;
+    const defaultBottom = viewportHeight - shape.y * s - radius;
+    controlGeometry.defaults[side] = Math.round(defaultSide); controlGeometry.defaults[bottom] = Math.round(defaultBottom);
+    controlGeometry.maximum[side] = Math.max(0, Math.floor(sideWidth - radius * 2 - 4));
+    controlGeometry.maximum[bottom] = Math.max(0, Math.floor(viewportHeight - top - radius * 2));
+    const margin = (name: MarginName) => Math.max(0, Math.min(controlGeometry.maximum[name], p[name] ?? controlGeometry.defaults[name]));
+    controlGeometry.actual[side] = margin(side); controlGeometry.actual[bottom] = margin(bottom);
+    shape.x = (control === 'joystick' ? margin(side) + radius : viewportWidth - margin(side) - radius) / s;
+    shape.y = (viewportHeight - margin(bottom) - radius) / s;
+    if (control === 'joystick') Object.assign(controlGeometry.floatingArea, { left: 0, top: top / s, right: (sideWidth - 4) / s, bottom: height });
+  };
+  place('joystick', 'joystickLeft', 'joystickBottom'); place('bomb', 'bombRight', 'bombBottom');
   return true;
 }

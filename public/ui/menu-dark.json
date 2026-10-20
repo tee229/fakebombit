@@ -1,0 +1,13 @@
+{
+  "id": "menu-dark",
+  "createdAt": "2026-10-21",
+  "mode": "built-in image_gen",
+  "sourceReference": ".impeccable/mocks/issue-19/center-stage.png",
+  "referenceRegion": "top-right dark menu environment",
+  "prompt": "Use case: stylized-concept\nAsset type: Full-bleed dark-mode landscape background for the real Fake Bomb It game menu, intended 1536×864, 16:9.\nInput image 1 is a visual STYLE reference only. Extract the environment from its TOP RIGHT dark menu panel, not the whole contact sheet and not the UI or characters.\nPrimary request: Make one complete clean toy-candy world background matching the selected reference's dark menu. Deep navy and blue-teal walls, softly rounded sculpted candy blocks, purple and pink gumdrop-like candy clusters, chunky toy building blocks, and a few small wooden toy crates around the extreme sides and bottom corners. A few simple stars decorate the far wall. Soft blue tiled floor in perspective, cozy yellow accent light.\nComposition/framing: Full-bleed scene with no surrounding frame, one landscape image. Keep the entire center 60 percent of the canvas very empty and visually quiet for real menu controls and existing character sprites. Edge decoration occupies the outer margins only; clear central stage area. Match the reference's softly lit polished 3D cartoon toy material, muted candy colors, rounded edges, subdued nighttime arcade mood.\nConstraints: This is background art ONLY. No title, letters, numbers, logos, watermarks, buttons, cards, thumbnails, joystick, bomb button, UI controls, overlays, characters, robots, animals, figures, icons, maps, or contact sheet. Do not reproduce any other panel of the reference. No text anywhere. Opaque background.",
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a15a1d-3fa5-7cb2-ad6a-bbe92554fd97\\exec-5846524d-a2dc-4fbc-9578-ccd37679d0b7.png",
+  "intendedDimensions": "1536x864",
+  "usage": "Full-screen dark menu backdrop; existing UI and characters render separately",
+  "inspection": "Inspected: clean central area, navy/teal toy-candy environment, edge decoration, no text or controls.",
+  "actualDimensions": "1672x941"
+}

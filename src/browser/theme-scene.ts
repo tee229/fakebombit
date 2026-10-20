@@ -4,26 +4,40 @@ import { builtinThemes } from '../resources/builtin-themes.js';
 import { builtinSkins } from '../resources/builtin-skins.js';
 import type { GameFlow, GameFlowState } from '../game-flow/index.js';
 import { diagnosticPackage } from './app-resources.js';
-import { readFeedbackSettings, feedbackLabels, cycleParticles, cycleVolume } from './feedback-settings.js';
-import { appearance, hex } from './appearance.js';
-import { arenaLayout } from './layout.js';
-
-const font = '"Segoe UI", "Microsoft YaHei", sans-serif';
+import { appearance, toggleAppearance } from './appearance.js';
+import { icon } from './ui-icons.js';
 
 export function preloadMenu(scene: Phaser.Scene): void {
-  for (const theme of builtinThemes) if (!scene.textures.exists(`preview:${theme.id}`)) scene.load.image(`preview:${theme.id}`, `./themes/${theme.id}-preview.svg`);
   for (const skin of builtinSkins) if (!scene.textures.exists(`skin-preview:${skin.id}`)) scene.load.image(`skin-preview:${skin.id}`, `./skins/${skin.id}-preview.svg`);
 }
 
-/** Canvas menu adapter. Business state and late-loading decisions belong to GameFlow. */
+/** Real menu controls overlay the engine; resource and match ownership stays in GameFlow. */
 export class ThemeMenu {
-  private content: Phaser.GameObjects.Container | undefined;
+  private readonly root = document.createElement('section');
   private rendered = '';
   private note = '';
   private readonly keyDown: (event: KeyboardEvent) => void;
-  constructor(private readonly scene: Phaser.Scene, private readonly flow: GameFlow<HTMLImageElement>) {
+  constructor(private readonly scene: Phaser.Scene, private readonly flow: GameFlow<HTMLImageElement>, openSettings: () => void) {
+    this.root.className = 'theme-menu'; this.root.setAttribute('aria-label', '选择地图和角色');
+    this.root.innerHTML = `<div class="menu-corner menu-corner-left"><button type="button" class="icon-button menu-settings" aria-label="打开设置">${icon('settings')}</button></div>
+      <button type="button" class="icon-button menu-appearance menu-corner" aria-label="切换明暗"></button>
+      <div class="selection-screen"><img class="menu-wordmark" src="./ui/wordmark.png" alt="Fake Bomb It" draggable="false">
+        <div class="menu-stage"><button type="button" class="theme-option" data-theme="candy"><img alt="" draggable="false"><strong>糖果乐园</strong></button>
+          <div class="skin-stage" role="group" aria-label="角色皮肤">${builtinSkins.map(skin => `<button type="button" class="skin-option" data-skin="${skin.id}"><img src="./skins/${skin.id}-preview.svg" alt="" draggable="false"><span>${skin.label}</span></button>`).join('')}</div>
+          <button type="button" class="theme-option" data-theme="factory"><img alt="" draggable="false"><strong>玩具工厂</strong></button></div>
+        <button type="button" class="primary-button start-game">${icon('play')}<span>开始游戏</span></button>
+        <p class="menu-hint">左右选主题 · 上下选皮肤 · Enter 开始</p></div>
+      <section class="preparation-screen" hidden aria-live="polite"><h1></h1><p class="preparation-description"></p><p class="preparation-error"></p><div class="preparation-actions"><button type="button" class="primary-button prepare-retry">重试准备</button><button type="button" class="secondary-button prepare-cancel">返回菜单</button></div></section>`;
+    this.root.querySelector('.menu-settings')!.addEventListener('click', openSettings);
+    this.root.querySelector('.menu-appearance')!.addEventListener('click', toggleAppearance);
+    this.root.querySelector('.start-game')!.addEventListener('click', () => { void flow.start(); });
+    this.root.querySelector('.prepare-retry')!.addEventListener('click', () => { void flow.retry(); });
+    this.root.querySelector('.prepare-cancel')!.addEventListener('click', () => this.cancel());
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-theme]')) button.addEventListener('click', () => this.choose(builtinThemes.find(t => t.id === button.dataset.theme)!, this.skin()));
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-skin]')) button.addEventListener('click', () => this.choose(this.theme(), builtinSkins.find(s => s.id === button.dataset.skin)!));
+    document.getElementById('game')!.append(this.root);
     this.keyDown = event => {
-      if (event.repeat || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (event.repeat || event.ctrlKey || event.altKey || event.metaKey || (event.target instanceof Element && event.target.closest('button,input,dialog'))) return;
       const phase = flow.read().phase;
       if (phase === 'preparing' && event.code === 'Escape') { event.preventDefault(); this.cancel(); }
       else if (phase === 'menu' || phase === 'failed') {
@@ -32,7 +46,7 @@ export class ThemeMenu {
           event.preventDefault();
           if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') this.choose(builtinThemes.find(theme => theme.id !== this.theme().id)!, this.skin());
           else this.choose(this.theme(), builtinSkins.find(skin => skin.id !== this.skin().id)!);
-        } else if (phase === 'menu' && event.code === 'KeyN') { event.preventDefault(); flow.newMatch(); this.note = '已选择新种子，可开始新对局。'; }
+        } else if (phase === 'menu' && event.code === 'KeyN') { event.preventDefault(); flow.newMatch(); this.note = '已选择新种子'; }
         else if (phase === 'failed' && event.code === 'Escape') { event.preventDefault(); flow.returnToMenu(); }
       }
     };
@@ -41,95 +55,38 @@ export class ThemeMenu {
   private theme(): ThemePackage { return builtinThemes.find(theme => theme.id === this.flow.read().selection.id) ?? builtinThemes[0]!; }
   private skin(): SkinPackage { return builtinSkins.find(skin => skin.id === this.flow.read().selection.skin?.id) ?? builtinSkins[0]!; }
   private choose(theme: ThemePackage, skin: SkinPackage): void { this.note = ''; this.flow.select(diagnosticPackage(withSkin(theme, skin))); }
-  private cancel(): void { this.note = '准备已取消，可重新选择。'; this.flow.returnToMenu(); }
-  private text(x: number, y: number, value: string, size: number, color = hex(appearance().ink)): Phaser.GameObjects.Text {
-    const text = this.scene.add.text(x, y, value, { fontFamily: font, fontSize: `${size}px`, color, align: 'center' }).setOrigin(0.5);
-    this.content!.add(text); return text;
-  }
-  private button(x: number, y: number, width: number, label: string, action: () => void, height = 58, size = 22): void {
-    const shape = this.scene.add.rectangle(x, y, width, height, appearance().accent).setStrokeStyle(2, appearance().border).setInteractive({ useHandCursor: true });
-    shape.on('pointerup', action); this.content!.add(shape); this.text(x, y, label, size, hex(appearance().buttonInk));
-  }
-  hide(): void { this.content?.destroy(true); this.content = undefined; this.rendered = ''; this.note = ''; }
+  private cancel(): void { this.note = '准备已取消，可重新选择'; this.flow.returnToMenu(); }
+  hide(): void { this.root.hidden = true; this.rendered = ''; this.note = ''; }
   present(state: GameFlowState<HTMLImageElement>): void {
-    if (state.run || state.phase === 'disposed') { if (this.content) this.hide(); return; }
-    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, readFeedbackSettings(), appearance().mode, arenaLayout.width, arenaLayout.height, arenaLayout.cssScale, arenaLayout.compact]);
-    if (key === this.rendered) return;
-    this.content?.destroy(true); this.content = this.scene.add.container(); this.rendered = key;
-    if (!arenaLayout.compact || state.phase !== 'menu') this.content.setPosition((arenaLayout.width - 1024) / 2, (arenaLayout.height - 576) / 2);
+    if (state.run || state.phase === 'disposed') { this.hide(); return; }
+    this.root.hidden = false;
+    const key = JSON.stringify([state.phase, state.selection.id, state.selection.skin?.id, state.error?.message, state.preparationId, this.note, appearance().mode]);
+    if (key === this.rendered) return; this.rendered = key;
     const canvas = this.scene.game.canvas;
-    for (const name of Object.keys(canvas.dataset)) delete canvas.dataset[name];
     canvas.dataset.phase = state.phase === 'menu' ? 'selecting' : state.phase;
     canvas.dataset.theme = state.selection.id; canvas.dataset.skin = state.selection.skin?.id ?? '';
-    if (state.phase === 'preparing') {
-      canvas.dataset.preparation = String(state.preparationId);
-      this.text(512, 205, `正在准备${this.theme().label} · ${this.skin().label}`, 30);
-      this.text(512, 276, '完成后才会开始计时，可随时取消。', 22, hex(appearance().muted));
-      this.button(512, 380, 260, '取消准备 · Esc', () => this.cancel());
-      this.status('正在准备资源，Escape 或取消按钮返回菜单；对局尚未创建。');
-    } else if (state.phase === 'failed') {
-      canvas.dataset.error = state.error?.message ?? '';
-      this.text(512, 180, '无法开始本局', 34);
-      this.text(512, 245, '资源或初始配置校验失败，对局没有开始。', 22, hex(appearance().muted));
-      this.text(512, 295, state.error?.message ?? '', 17, hex(appearance().warning)).setWordWrapWidth(860);
-      this.button(355, 405, 250, '重试准备 · Enter', () => { void this.flow.retry(); });
-      this.button(669, 405, 250, '返回菜单 · Esc', () => { this.flow.returnToMenu(); });
-      this.status(`无法开始本局：${state.error?.message ?? ''}。可重试或返回菜单。`);
-    } else this.showSelection();
-    canvas.setAttribute('aria-label', state.phase === 'menu' ? '左右选地图主题，上下选角色皮肤，Enter 开始' : state.phase === 'preparing' ? '正在准备资源，Escape 取消' : '准备失败，Enter 重试，Escape 返回菜单');
+    const selecting = state.phase === 'menu';
+    this.root.querySelector<HTMLElement>('.selection-screen')!.hidden = !selecting;
+    this.root.querySelector<HTMLElement>('.preparation-screen')!.hidden = selecting;
+    this.root.querySelector<HTMLButtonElement>('.menu-settings')!.disabled = !selecting;
+    const light = appearance().mode === 'light', toggle = this.root.querySelector<HTMLButtonElement>('.menu-appearance')!;
+    toggle.innerHTML = icon(light ? 'sun' : 'moon'); toggle.setAttribute('aria-label', light ? '切换为暗色主题' : '切换为亮色主题');
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-theme]')) {
+      button.setAttribute('aria-pressed', String(button.dataset.theme === this.theme().id));
+      button.querySelector('img')!.src = `./themes/${button.dataset.theme}${light ? '' : '-dark'}-preview.svg`;
+    }
+    for (const button of this.root.querySelectorAll<HTMLButtonElement>('[data-skin]')) button.setAttribute('aria-pressed', String(button.dataset.skin === this.skin().id));
+    this.root.querySelector('.menu-hint')!.textContent = this.note || '左右选主题 · 上下选皮肤 · Enter 开始';
+    const failed = state.phase === 'failed';
+    this.root.querySelector('.preparation-screen h1')!.textContent = failed ? '无法开始本局' : `正在准备${this.theme().label}`;
+    this.root.querySelector('.preparation-description')!.textContent = failed ? '资源准备失败，对局尚未开始。' : '正在准备明暗外观与角色，完成后开始计时。';
+    this.root.querySelector('.preparation-error')!.textContent = state.error?.message ?? '';
+    this.root.querySelector<HTMLButtonElement>('.prepare-retry')!.hidden = !failed;
+    this.root.querySelector('.prepare-cancel')!.textContent = failed ? '返回菜单' : '取消准备';
+    canvas.dataset.preparation = String(state.preparationId ?? ''); canvas.dataset.error = state.error?.message ?? '';
+    const message = selecting ? `当前主题：${this.theme().label}，角色：${this.skin().label}。左右选主题，上下选皮肤，Enter开始。` : failed ? `准备失败：${state.error?.message ?? ''}` : '正在准备资源，Escape取消。';
+    canvas.setAttribute('aria-label', message);
+    const status = document.getElementById('game-status'); if (status) status.textContent = message;
   }
-  private showSelection(): void {
-    if (arenaLayout.compact) { this.showCompactSelection(); return; }
-    this.text(512, 35, 'Fake Bomb It', 32); this.text(512, 75, '选择地图主题和角色皮肤', 23, hex(appearance().muted));
-    builtinThemes.forEach((theme, index) => {
-      const x = index === 0 ? 290 : 734, selected = theme.id === this.theme().id;
-      const panel = this.scene.add.rectangle(x, 214, 396, 236, selected ? appearance().selected : appearance().surface).setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
-      panel.on('pointerup', () => this.choose(theme, this.skin())); this.content!.add(panel);
-      if (this.scene.textures.exists(`preview:${theme.id}`)) this.content!.add(this.scene.add.image(x, 183, `preview:${theme.id}`).setDisplaySize(240, 144));
-      this.text(x, 280, `${selected ? '● ' : ''}${theme.label}`, 24);
-      this.text(x, 314, index === 0 ? '奶油墙 · 威化障碍 · 巧克力炸弹' : '积木墙 · 纸箱障碍 · 金属炸弹', 17, hex(appearance().muted));
-    });
-    this.text(512, 353, '角色皮肤 · ↑ ↓ 切换', 18, hex(appearance().muted));
-    builtinSkins.forEach((skin, index) => {
-      const x = index === 0 ? 330 : 694, selected = skin.id === this.skin().id;
-      const panel = this.scene.add.rectangle(x, 416, 320, 88, selected ? appearance().selected : appearance().surface).setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
-      panel.on('pointerup', () => this.choose(this.theme(), skin)); this.content!.add(panel);
-      if (this.scene.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.scene.add.image(x - 96, 410, `skin-preview:${skin.id}`).setDisplaySize(78, 78));
-      this.text(x + 36, 401, skin.label, 24); this.text(x + 36, 431, selected ? '已选择' : '点击选用', 17, selected ? hex(appearance().accent) : hex(appearance().muted));
-    });
-    this.button(512, 501, 360, `开始 · ${this.skin().label}`, () => { void this.flow.start(); });
-    const settings = feedbackLabels();
-    this.button(166, 501, 232, settings.volume, cycleVolume);
-    this.button(858, 501, 232, settings.particles, cycleParticles);
-    this.text(512, 552, this.note || '← → 选主题 · ↑ ↓ 选皮肤 · Enter 开始', 17, hex(appearance().muted));
-    this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。左右选主题，上下选皮肤，Enter 或点击开始。`);
-  }
-  private showCompactSelection(): void {
-    const s = arenaLayout.cssScale, width = arenaLayout.width * s, height = arenaLayout.height * s;
-    const text = (x: number, y: number, value: string, size: number, color = hex(appearance().ink)) => this.text(x / s, y / s, value, size / s, color);
-    text(width / 2, 22, 'Fake Bomb It · 选择外观', 17);
-    builtinThemes.forEach((theme, index) => {
-      const x = width * (index === 0 ? .25 : .75), selected = theme.id === this.theme().id;
-      const panel = this.scene.add.rectangle(x / s, 78 / s, (width / 2 - 24) / s, 68 / s, selected ? appearance().selected : appearance().surface)
-        .setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
-      panel.on('pointerup', () => this.choose(theme, this.skin())); this.content!.add(panel);
-      if (this.scene.textures.exists(`preview:${theme.id}`)) this.content!.add(this.scene.add.image((x - 65) / s, 78 / s, `preview:${theme.id}`).setDisplaySize(82 / s, 50 / s));
-      text(x + 42, 78, `${selected ? '● ' : ''}${theme.label}`, 17, selected ? hex(appearance().accent) : hex(appearance().ink));
-    });
-    builtinSkins.forEach((skin, index) => {
-      const x = width * (index === 0 ? .25 : .75), selected = skin.id === this.skin().id;
-      const panel = this.scene.add.rectangle(x / s, 148 / s, (width / 2 - 24) / s, 44 / s, selected ? appearance().selected : appearance().surface)
-        .setStrokeStyle(selected ? 3 : 1, selected ? appearance().accent : appearance().border).setInteractive({ useHandCursor: true });
-      panel.on('pointerup', () => this.choose(this.theme(), skin)); this.content!.add(panel);
-      if (this.scene.textures.exists(`skin-preview:${skin.id}`)) this.content!.add(this.scene.add.image((x - 62) / s, 148 / s, `skin-preview:${skin.id}`).setDisplaySize(36 / s, 36 / s));
-      text(x + 24, 148, `${selected ? '● ' : ''}${skin.label}`, 15, selected ? hex(appearance().accent) : hex(appearance().ink));
-    });
-    const settings = feedbackLabels(), y = (height - 30) / s;
-    this.button(width / 2 / s, y, 200 / s, `开始 · ${this.skin().label}`, () => { void this.flow.start(); }, 44 / s, 16 / s);
-    this.button(96 / s, y, 168 / s, settings.volume, cycleVolume, 44 / s, 14 / s);
-    this.button((width - 96) / s, y, 168 / s, settings.particles, cycleParticles, 44 / s, 14 / s);
-    this.status(`${this.note} 当前主题：${this.theme().label}，皮肤：${this.skin().label}。点击主题或皮肤选择，点击开始。`);
-  }
-  private status(message: string): void { const status = document.getElementById('game-status'); if (status) status.textContent = message; }
-  destroy(): void { this.hide(); window.removeEventListener('keydown', this.keyDown); }
+  destroy(): void { this.root.remove(); window.removeEventListener('keydown', this.keyDown); }
 }

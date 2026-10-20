@@ -8,6 +8,13 @@ const rect = (x: number, y: number, width: number, height: number, fill: string,
 const circle = (x: number, y: number, radius: number, fill: string, stroke = 'none', line = 2) => `<circle cx="${x}" cy="${y}" r="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${line}"/>`;
 const path = (d: string, fill: string, stroke = 'none', width = 2) => `<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`;
 const svg = (width: number, height: number, content: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><title>Fake Bomb It original built-in theme artwork</title>${content}</svg>\n`;
+// Recolor the existing authored vectors, keeping silhouettes and semantic frames identical.
+function nightArt(content: string, candy: boolean): string {
+  const palette: Record<string, string> = candy
+    ? { '#fff0d7': '#243b56', '#dfc5a4': '#38516c', '#f2dbb9': '#304962', '#6d3d4b': '#4c304f', '#ffe3e7': '#f8cbdc', '#fff1eb': '#ffdce8', '#e5b678': '#c39470', '#f7d9c3': '#e4b7b0', '#c99fa5': '#698498' }
+    : { '#b6cbc5': '#1a3449', '#c7d6cc': '#24465a', '#91aaa5': '#376078', '#dce4d6': '#3d6577', '#254852': '#142c44', '#5b97a0': '#43829e', '#9ecbc2': '#83bdcf', '#ce9c68': '#bb8b64', '#e5c394': '#d8b488', '#6b9390': '#628a9c' };
+  return content.replace(/#[0-9a-f]{6}(?![0-9a-f])/g, color => palette[color] ?? color);
+}
 
 for (const kind of ['candy', 'factory'] as const) {
   const candy = kind === 'candy';
@@ -55,10 +62,12 @@ for (const kind of ['candy', 'factory'] as const) {
   frames.push(circle(32, 32, 17, 'none', candy ? '#c99fa5' : '#6b9390', 2) + path('M24 32h16M32 24v16', 'none', candy ? '#c99fa5' : '#6b9390', 2));
   const atlas = frames.map((frame, index) => `<g transform="translate(${index % 8 * 64} ${Math.floor(index / 8) * 64})">${frame}</g>`).join('');
   writeFileSync(resolve(directory, `${kind}-atlas.svg`), svg(512, 192, atlas));
+  writeFileSync(resolve(directory, `${kind}-dark-atlas.svg`), svg(512, 192, nightArt(atlas, candy)));
   const accent = candy ? path('M31 55V20', 'none', '#e4d6bc', 6) + circle(31, 20, 17, '#efa2bc', ink, 3) + path('M25 9C8 22 37 41 43 20C44 7 22 6 23 21C24 29 35 31 37 21', 'none', '#fff0df', 4)
     : rect(16, 38, 36, 17, '#d59c67', 4, ink, 3) + path('M20 37l7-20h17l5 20z', '#709e9f', ink, 3) + circle(25, 55, 5, ink) + circle(45, 55, 5, ink) + path('M32 17V7M28 7h8', 'none', '#e0bb72', 4);
   writeFileSync(resolve(directory, `${kind}-accent.svg`), svg(64, 64, accent));
   const arrangement = [[1, 1, 1, 1, 1], [1, 14, 2, 11, 1], [1, 0, 3, 15, 1]];
   const preview = arrangement.map((row, y) => row.map((frame, x) => `<g transform="translate(${x * 64} ${y * 64})">${frames[0]}${frame === 0 ? '' : frames[frame]}</g>`).join('')).join('');
   writeFileSync(resolve(directory, `${kind}-preview.svg`), svg(320, 192, preview));
+  writeFileSync(resolve(directory, `${kind}-dark-preview.svg`), svg(320, 192, nightArt(preview, candy)));
 }

@@ -3,6 +3,7 @@ import type { WorldState } from '../match/index.js';
 import { resolveVisual, visualSlotFor, type ReadyTheme, type VisualSlot } from '../resources/index.js';
 import type { ActorPose } from '../resources/skin-playback.js';
 import { ActorSprites } from './actor-sprites.js';
+import { appearance } from './appearance.js';
 
 /** Synchronizes current facts only. Animation time cannot create or prolong gameplay objects. */
 export class NormalBoard {
@@ -17,11 +18,12 @@ export class NormalBoard {
     const live = new Set<string>();
     const rate = world.initialization.rules.tickRate;
     const draw = (id: string, slot: VisualSlot, x: number, y: number, depth: number, age = 0, opacity = 1) => {
-      const visual = resolveVisual(this.theme, slot, age);
+      const visual = resolveVisual(this.theme, slot, age, appearance().mode);
       if (!visual) return;
       live.add(id);
       let image = this.images.get(id);
       if (!image) { image = this.scene.add.image(0, 0, visual.image.key, visual.frame); this.root.add(image); this.images.set(id, image); }
+      if (image.texture.key !== visual.image.key) image.setTexture(visual.image.key, visual.frame);
       image.setFrame(visual.frame).setOrigin(visual.anchor.x, visual.anchor.y)
         .setPosition(x * 60 + visual.offset.x * 60 / visual.referenceSize.width, y * 60 + visual.offset.y * 60 / visual.referenceSize.height)
         .setScale(60 / visual.referenceSize.width, 60 / visual.referenceSize.height).setDepth(depth).setAlpha(opacity);

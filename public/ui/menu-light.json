@@ -1,0 +1,22 @@
+{
+  "id": "menu-light",
+  "generatedAt": "2026-10-21",
+  "tool": "image_gen.imagegen",
+  "reference": "../../.impeccable/mocks/issue-19/center-stage.png",
+  "referenceRegion": "top left menu panel",
+  "prompt": "Use case: stylized-concept\nAsset type: production full-screen background for a landscape browser arcade game's light-mode main menu.\nInput image 1 is reference ONLY. Strictly take the art direction and environmental materials from its TOP LEFT menu panel. Do not reproduce the composite sheet, its framing, or any UI.\nPrimary request: a single clean landscape 1536x864 background plate, warm ivory candy-and-toy arcade world. Soft rounded candy-pink sugar blocks, pale wooden crates with inset X details, a few mint and peach toy blocks, arranged sparsely at the far left edge, far right edge and bottom corners. A simple cream tiled floor has gentle perspective receding toward the softly lit upper background.\nComposition: central sixty percent of the canvas must stay bright, quiet and almost empty, including the upper middle and middle bottom, so an existing real game title, character sprites and controls can be overlaid in code. Keep all decorative objects confined to the outside twenty percent on either side and bottom corners. No central pedestal, no central object, no invented menu cards.\nStyle: polished softly shaded 3D toy illustration, rounded bevels, tactile matte candy surfaces, subtle shadows, pastel warmth. Faithful to the selected source's light menu environment; friendly rounded arcade look.\nPalette: ivory cream, pale butter yellow floor, blush pink sugar, light peach wood, tiny pale mint accents. Bright soft ambient illumination, no strong spotlight.\nText: none.\nConstraints: one uninterrupted 16:9 environment only. No title, no letters, no numbers, no logo, no watermark, no buttons, no UI, no character, no animal, no robot, no thumbnail, no border, no reference-sheet rows. Existing mint rabbit and coral robot will be rendered separately by the application.",
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a15a1d-1b3b-7630-afa2-956cc0b4a49e\\exec-e3a7f6fc-bff9-4b72-b723-2e84ee7ab2e3.png",
+  "asset": "menu-light.png",
+  "inspection": {
+    "style": "Warm ivory light-mode candy/toy arcade environment matches selected image 2.",
+    "composition": "Open center suitable for real title, sprites and controls; sparse edge decorations.",
+    "absent": [
+      "text",
+      "logos",
+      "characters",
+      "buttons",
+      "UI"
+    ],
+    "aspectRatio": "16:9"
+  }
+}

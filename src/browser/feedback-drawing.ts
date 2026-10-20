@@ -2,9 +2,10 @@ import type Phaser from 'phaser';
 import type { DangerCell, FeedbackEffect } from '../presentation/feedback.js';
 
 /** Sparse shapes on the existing board coordinates; no timers, callbacks or gameplay writes. */
-export function drawFeedback(g: Phaser.GameObjects.Graphics, effects: readonly FeedbackEffect[], danger: readonly DangerCell[], theme: string, reducedMotion: boolean): void {
+export function drawFeedback(g: Phaser.GameObjects.Graphics, effects: readonly FeedbackEffect[], danger: readonly DangerCell[], theme: string, reducedMotion: boolean, mode: 'light' | 'dark' = 'light'): void {
   g.clear();
-  const candy = theme === 'candy', colors = candy ? [0xe79db8, 0xf1ca7c, 0xfff0d7] : [0xce9c68, 0x92c8c4, 0xe9d7a6];
+  const candy = theme === 'candy', colors = mode === 'dark' ? (candy ? [0xffbbdb, 0xffdf92, 0xcfe5ff] : [0xf2b87e, 0xb7f3ef, 0xffe7b3])
+    : candy ? [0xe79db8, 0xf1ca7c, 0xfff0d7] : [0xce9c68, 0x92c8c4, 0xe9d7a6];
   // Directional cross strokes stay inside precisely the hazardous cells. No fire-colored afterglow.
   for (const { position, connections } of danger) {
     const x = (position.x + .5) * 60, y = (position.y + .5) * 60;

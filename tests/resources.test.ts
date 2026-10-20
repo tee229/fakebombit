@@ -13,6 +13,54 @@ const theme: ThemePackage = { format: 'builtin-theme-v1', id: 'test-theme', labe
     'item.capacity': pose, 'item.range': pose, 'item.speed': pose },
 };
 
+test('both appearance variants are prepared before play and shared images load only once', async () => {
+  const loaded: string[] = [];
+  const resources = createResourcePreparation(async resource => {
+    loaded.push(resource.url);
+    return { value: resource.url, width: resource.width, height: resource.height };
+  });
+  const source: ThemePackage = { ...theme,
+    resources: [...theme.resources, { ...theme.resources[0]!, id: 'night', url: '/night.svg' }],
+    appearances: { light: { slots: theme.slots }, dark: { slots: { ...theme.slots, 'terrain.floor': { ...pose, resource: 'night' } } } },
+  };
+  const result = await resources.start(source, ready => ({
+    light: resolveVisual(ready, 'terrain.floor', 0, 'light')?.image.value,
+    dark: resolveVisual(ready, 'terrain.floor', 0, 'dark')?.image.value,
+    shared: resolveVisual(ready, 'bomb.idle', 0, 'dark')?.image.value,
+  })).completion;
+  expect(result).toEqual({ status: 'ready', value: { light: '/assets/test.svg', dark: '/night.svg', shared: '/assets/test.svg' } });
+  expect(loaded).toEqual(['/assets/test.svg', '/night.svg']);
+});
+
+test('a required dark image failure blocks the match and a retry reuses the light image', async () => {
+  const requests: string[] = []; let failDark = true, starts = 0;
+  const resources = createResourcePreparation(async resource => {
+    requests.push(resource.id);
+    if (resource.id === 'night' && failDark) throw new Error('dark image unavailable');
+    return { value: resource.id, width: resource.width, height: resource.height };
+  });
+  const source: ThemePackage = { ...theme,
+    resources: [...theme.resources, { ...theme.resources[0]!, id: 'night', url: '/night.svg' }],
+    appearances: { light: { slots: theme.slots }, dark: { slots: { ...theme.slots, 'bomb.idle': { ...pose, resource: 'night' } } } },
+  };
+  expect(await resources.start(source, () => ++starts).completion).toMatchObject({ status: 'failed', error: { code: 'load-failed' } });
+  expect(starts).toBe(0);
+  failDark = false;
+  expect(await resources.start(source, () => ++starts).completion).toEqual({ status: 'ready', value: 1 });
+  expect(requests).toEqual(['tiles', 'night', 'night']);
+});
+
+test('a variant cannot omit required slots or reference an optional image for gameplay objects', async () => {
+  const resources = createResourcePreparation(async resource => ({ value: resource.url, width: resource.width, height: resource.height }));
+  for (const dark of [{ slots: {} }, { slots: { ...theme.slots, 'terrain.floor': { ...pose, resource: 'decoration' } } }]) {
+    const result = await resources.start({ ...theme,
+      resources: [...theme.resources, { ...theme.resources[0]!, id: 'decoration', required: false }],
+      appearances: { light: { slots: theme.slots }, dark },
+    }, () => 'started').completion;
+    expect(result).toMatchObject({ status: 'failed', error: { code: 'invalid-package' } });
+  }
+});
+
 test('semantic objects resolve to explicit slots without requiring a texture or game engine', () => {
   const types = ['floor', 'solid-wall', 'breakable-wall', 'spawn', 'player', 'opponent', 'bomb', 'fire', 'item.capacity', 'item.range', 'item.speed'] as const;
   expect(types.map(visualSlotFor))
@@ -166,6 +214,9 @@ test('both built-in themes have complete slots and identical worlds and events f
   };
   const candy = await prepare(builtinThemes[0]!), factory = await prepare(builtinThemes[1]!);
   expect(resolveVisual(candy.ready, 'terrain.solid')?.image.value).not.toEqual(resolveVisual(factory.ready, 'terrain.solid')?.image.value);
+  for (const ready of [candy.ready, factory.ready]) {
+    expect(resolveVisual(ready, 'terrain.floor', 0, 'dark')?.image.value).not.toEqual(resolveVisual(ready, 'terrain.floor', 0, 'light')?.image.value);
+  }
   const seen = new Set<string>();
   for (let tick = 0; tick < 250; tick++) {
     const move = tick < 10 ? 'up' : tick < 50 ? 'right' : null;
@@ -174,7 +225,7 @@ test('both built-in themes have complete slots and identical worlds and events f
     events.forEach(event => seen.add(event.type));
     expect(factory.match.advanceTick(intents)).toEqual(events);
     expect(factory.match.readWorld()).toEqual(candy.match.readWorld());
-    for (const ready of [candy.ready, factory.ready]) for (const type of ['floor', 'solid-wall', 'breakable-wall', 'spawn', 'player', 'opponent', 'bomb', 'fire', 'item.capacity', 'item.range', 'item.speed'] as const) expect(resolveVisual(ready, visualSlotFor(type), tick / 60)).not.toBeNull();
+    for (const ready of [candy.ready, factory.ready]) for (const mode of ['light', 'dark'] as const) for (const type of ['floor', 'solid-wall', 'breakable-wall', 'spawn', 'player', 'opponent', 'bomb', 'fire', 'item.capacity', 'item.range', 'item.speed'] as const) expect(resolveVisual(ready, visualSlotFor(type), tick / 60, mode)).not.toBeNull();
   }
   expect([...seen]).toEqual(expect.arrayContaining(['bomb-placed', 'bomb-exploded', 'blocker-destroyed']));
 });

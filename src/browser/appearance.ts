@@ -1,6 +1,6 @@
 const palettes = {
-  dark: { background: 0x102b2c, surface: 0x173737, selected: 0x24483f, border: 0x79958c, ink: 0xeaf3ed, muted: 0xb8d1c6, accent: 0x83dfb6, warning: 0xffaf8c, buttonInk: 0x102b2c },
-  light: { background: 0xeef3eb, surface: 0xffffff, selected: 0xd6e9dc, border: 0x59766a, ink: 0x163c35, muted: 0x466458, accent: 0x176b4d, warning: 0x9b3e20, buttonInk: 0xffffff },
+  dark: { background: 0x142a43, surface: 0x1c3f57, selected: 0x24596c, border: 0x588198, ink: 0xf3fbf7, muted: 0xb4d0db, accent: 0xffd45e, warning: 0xffb09c, buttonInk: 0x243543 },
+  light: { background: 0xf8f4e9, surface: 0xfffcf4, selected: 0xd0f4e8, border: 0xc6c8b6, ink: 0x103d4a, muted: 0x49636b, accent: 0x1f947c, warning: 0x9b3e20, buttonInk: 0xffffff },
 };
 let mode: keyof typeof palettes = 'dark';
 try { if (localStorage.getItem('fakebombit-appearance') === 'light') mode = 'light'; } catch { /* Storage may be disabled. */ }

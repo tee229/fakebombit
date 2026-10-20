@@ -1,0 +1,17 @@
+{
+  "id": "fake-bomb-it-wordmark",
+  "createdAt": "2026-10-21",
+  "tool": "image_gen built-in",
+  "prompt": "Use case: logo-brand\nAsset type: transparent raster wordmark for the top center of a browser arcade game menu, intended display around 420 by 110 CSS pixels.\nPrimary request: create only the exact English game title \"Fake Bomb It\", in one horizontal line, faithfully matching the rounded, puffy arcade lettering from the top menu title of the supplied reference image. The reference image is style reference only; do not reproduce any screen layout.\nText (verbatim): \"Fake Bomb It\". Spelling must be exact: F a k e [space] B o m b [space] I t.\nStyle: polished soft three-dimensional cartoon lettering with thick dark navy outline, subtle teal offset edge and shallow soft shadow, rounded corners, creamy highlights.\nPalette: Fake in pale mint-white with a restrained pale coral lower edge; Bomb It in warm creamy yellow. Strong navy outline provides contrast on both ivory and navy menu backgrounds.\nComposition: one compact horizontal title, approximately 4:1 width to height, lettering fills the image width with only a small transparent margin; every letter visible; no text overlap. Transparent background, actual alpha channel, no background color, no checkerboard drawn into the image.\nConstraints: only title lettering; a tiny bomb fuse integrated into a letter is optional, restrained. No standalone bomb illustration, no characters, no scenery, no UI, no subtitle, no extra icons, no border, no watermark.",
+  "reference": ".impeccable/mocks/issue-19/center-stage.png",
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a15a1d-6a92-7e82-b750-3da7b9f88979\\exec-c58e0f0d-8590-45bb-90c8-1efe86aaea0a.png",
+  "image": "wordmark.png",
+  "transparentBackground": true,
+  "verification": {
+    "text": "Fake Bomb It",
+    "visualReview": "Exact lettering, mint-white Fake with pale coral edge, warm cream-yellow Bomb It, navy outline. No characters or extra decorations.",
+    "alpha": "RGBA verified; alpha range 0–255; 2079×756 pixels; nontransparent bounds (39,81)–(2066,712)"
+  },
+  "usage": "menu wordmark; user selected image 2",
+  "promptEmbedded": true
+}

@@ -1,0 +1,23 @@
+// Phosphor's supplied SVG assets: rounded bold strokes suit the selected arcade UI.
+import pause from '@phosphor-icons/core/assets/bold/pause-bold.svg?raw';
+import play from '@phosphor-icons/core/assets/fill/play-fill.svg?raw';
+import fullscreen from '@phosphor-icons/core/assets/bold/corners-out-bold.svg?raw';
+import restore from '@phosphor-icons/core/assets/bold/corners-in-bold.svg?raw';
+import settings from '@phosphor-icons/core/assets/bold/gear-six-bold.svg?raw';
+import sun from '@phosphor-icons/core/assets/bold/sun-bold.svg?raw';
+import moon from '@phosphor-icons/core/assets/fill/moon-fill.svg?raw';
+import layers from '@phosphor-icons/core/assets/bold/stack-bold.svg?raw';
+import close from '@phosphor-icons/core/assets/bold/x-bold.svg?raw';
+import gamepad from '@phosphor-icons/core/assets/fill/game-controller-fill.svg?raw';
+import volume from '@phosphor-icons/core/assets/fill/speaker-high-fill.svg?raw';
+import sparkles from '@phosphor-icons/core/assets/bold/sparkle-bold.svg?raw';
+import bomb from '@phosphor-icons/core/assets/fill/bomb-fill.svg?raw';
+import up from '@phosphor-icons/core/assets/bold/caret-up-bold.svg?raw';
+import down from '@phosphor-icons/core/assets/bold/caret-down-bold.svg?raw';
+import left from '@phosphor-icons/core/assets/bold/caret-left-bold.svg?raw';
+import right from '@phosphor-icons/core/assets/bold/caret-right-bold.svg?raw';
+import retry from '@phosphor-icons/core/assets/bold/arrow-counter-clockwise-bold.svg?raw';
+import home from '@phosphor-icons/core/assets/bold/house-bold.svg?raw';
+const icons = { pause, play, fullscreen, restore, settings, sun, moon, layers, close, gamepad, volume, sparkles, bomb, up, down, left, right, retry, home };
+export type Icon = keyof typeof icons;
+export const icon = (name: Icon): string => icons[name].replace('<svg ', '<svg aria-hidden="true" focusable="false" ');

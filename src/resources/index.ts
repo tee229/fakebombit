@@ -1,6 +1,8 @@
 export const requiredSlots = ['terrain.floor', 'terrain.solid', 'terrain.breakable', 'spawn.marker',
   'actor.player', 'actor.opponent', 'bomb.idle', 'hazard.fire', 'item.capacity', 'item.range', 'item.speed'] as const;
 export type VisualSlot = typeof requiredSlots[number] | 'decoration.accent';
+export type AppearanceMode = 'light' | 'dark';
+export interface ThemeAppearanceVariant { readonly slots: Readonly<Partial<Record<VisualSlot, VisualDefinition>>> }
 const semanticSlots = { floor: 'terrain.floor', 'solid-wall': 'terrain.solid', 'breakable-wall': 'terrain.breakable', spawn: 'spawn.marker',
   player: 'actor.player', opponent: 'actor.opponent', bomb: 'bomb.idle', fire: 'hazard.fire',
   'item.capacity': 'item.capacity', 'item.range': 'item.range', 'item.speed': 'item.speed' } as const;
@@ -20,6 +22,7 @@ export interface ThemePackage {
   readonly format: 'builtin-theme-v1'; readonly id: string; readonly label: string;
   readonly resources: readonly ThemeResource[];
   readonly slots: Readonly<Partial<Record<VisualSlot, VisualDefinition>>>;
+  readonly appearances?: Readonly<Record<AppearanceMode, ThemeAppearanceVariant>>;
   readonly skin?: SkinPackage;
 }
 export const skinActions = ['idle', 'move', 'eliminated'] as const;
@@ -57,8 +60,8 @@ function sampleAnimation(definition: VisualDefinition, elapsedSeconds: number) {
     finished: !definition.loop && elapsedFrame >= definition.frames.length,
   };
 }
-export function resolveVisual<T>(ready: ReadyTheme<T>, slot: VisualSlot, elapsedSeconds = 0) {
-  const definition = ready.package.slots[slot];
+export function resolveVisual<T>(ready: ReadyTheme<T>, slot: VisualSlot, elapsedSeconds = 0, mode: AppearanceMode = 'light') {
+  const definition = (ready.package.appearances?.[mode].slots ?? ready.package.slots)[slot];
   const image = definition && ready.images[definition.resource];
   if (!definition || !image) return null;
   const { index } = sampleAnimation(definition, elapsedSeconds);
@@ -183,10 +186,24 @@ function validateTheme(source: ThemePackage): { theme: ThemePackage; diagnostics
     }
     ids.add(resource.id); resources.push({ ...resource });
   }
-  for (const slot of requiredSlots) if (!source.slots[slot]) throw new ResourceError('invalid-package', `Missing required slot: ${slot}`);
+  const slots = validateSlots(source.slots, resources, diagnostics);
+  let appearances: Record<AppearanceMode, ThemeAppearanceVariant> | undefined;
+  if (source.appearances !== undefined) {
+    if (!record(source.appearances) || !record(source.appearances.light) || !record(source.appearances.dark)) throw new ResourceError('invalid-package', 'Both appearance variants are required');
+    appearances = { light: { slots: validateSlots(source.appearances.light.slots, resources, diagnostics) },
+      dark: { slots: validateSlots(source.appearances.dark.slots, resources, diagnostics) } };
+  }
+  return { theme: immutable({ format: 'builtin-theme-v1', id: source.id, label: source.label, resources, slots,
+    ...(appearances ? { appearances } : {}),
+    ...(source.skin !== undefined ? { skin: validateSkin(source.skin, resources) } : {}) }), diagnostics };
+}
+
+function validateSlots(source: ThemeAppearanceVariant['slots'], resources: readonly ThemeResource[], diagnostics: ResourceDiagnostic[]) {
+  if (!record(source)) throw new ResourceError('invalid-package', 'Invalid appearance slots');
+  for (const slot of requiredSlots) if (!source[slot]) throw new ResourceError('invalid-package', `Missing required slot: ${slot}`);
   const slots: Partial<Record<VisualSlot, VisualDefinition>> = {};
   for (const slot of [...requiredSlots, 'decoration.accent'] as const) {
-    const definition = source.slots[slot];
+    const definition = source[slot];
     if (!definition) continue;
     const resource = resources.find(image => image.id === definition.resource);
     const valid = resource && visualDefinition(definition, resources) && (slot === 'decoration.accent' || resource.required);
@@ -196,8 +213,7 @@ function validateTheme(source: ThemePackage): { theme: ThemePackage; diagnostics
     }
     slots[slot] = copyVisual(definition);
   }
-  return { theme: immutable({ format: 'builtin-theme-v1', id: source.id, label: source.label, resources, slots,
-    ...(source.skin !== undefined ? { skin: validateSkin(source.skin, resources) } : {}) }), diagnostics };
+  return slots;
 }
 
 function immutable<T>(value: T): T {

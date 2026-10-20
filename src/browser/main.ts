@@ -13,7 +13,7 @@ import { arenaLayout, updateArenaLayout } from './layout.js';
 import { preloadFeedbackAudio } from './feedback-audio.js';
 import { AcceptancePanel } from './acceptance-panel.js';
 import { GameToolbar } from './game-toolbar.js';
-import { appearance, hex } from './appearance.js';
+import { appearance } from './appearance.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
@@ -35,15 +35,17 @@ class GameScene extends Phaser.Scene {
         if (this.acceptance) this.acceptance.recordCreation(performance.now() - started); return setup.match; },
       freshMatch, mountRun: run => this.mountRun(run),
     });
-    this.menu = new ThemeMenu(this, this.flow);
+    this.menu = new ThemeMenu(this, this.flow, () => this.toolbar?.openSettings());
     this.toolbar = new GameToolbar({ pause: () => { this.flow?.pause(); }, resume: () => this.resume(),
       fullscreen: () => this.fullscreen(), switchView: () => this.live?.view.toggleMode(),
-      menu: () => { this.flow?.returnToMenu(); }, focusCanvas: () => this.game.canvas.focus({ preventScroll: true }) });
+      menu: () => { this.flow?.returnToMenu(); }, focusCanvas: () => this.game.canvas.focus({ preventScroll: true }),
+      controlsChanged: () => { this.live?.controls.clear(); updateArenaLayout(viewportWidth, viewportHeight, this.flow?.read().phase === 'playing'); } });
     const canvas = this.game.canvas;
     canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-describedby', 'instructions'); canvas.focus({ preventScroll: true });
     const background = () => { this.acceptance?.interrupt(); this.flow?.pause('background'); };
     const visibility = () => { if (document.visibilityState === 'hidden') background(); };
     const resize = () => {
+      this.live?.controls.clear();
       const bounds = document.getElementById('game')!.getBoundingClientRect();
       viewportWidth = bounds.width; viewportHeight = bounds.height;
       if (updateArenaLayout(viewportWidth, viewportHeight, this.flow?.read().phase === 'playing')) {
@@ -53,7 +55,7 @@ class GameScene extends Phaser.Scene {
     };
     const viewportObserver = new ResizeObserver(resize); viewportObserver.observe(document.getElementById('game')!);
     window.addEventListener('blur', background); window.addEventListener('pagehide', background);
-    window.addEventListener('resize', resize); document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('resize', resize); document.addEventListener('fullscreenchange', resize); document.addEventListener('visibilitychange', visibility);
     let disposed = false;
     const cleanup = () => {
       if (disposed) return; disposed = true;
@@ -61,7 +63,7 @@ class GameScene extends Phaser.Scene {
       this.acceptance?.dispose(); this.acceptance = undefined;
       this.toolbar?.destroy(); this.toolbar = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
-      window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('resize', resize); document.removeEventListener('fullscreenchange', resize); document.removeEventListener('visibilitychange', visibility);
       viewportObserver.disconnect();
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
     };
@@ -90,10 +92,10 @@ class GameScene extends Phaser.Scene {
       controls = new CanvasControls(this, input, {
         resume: () => this.resume(), retry: () => { void flow.retry(); },
         newMatch: () => { flow.newMatch(); }, menu: () => { flow.returnToMenu(); },
+        settings: () => this.toolbar?.openSettings(),
       });
       controls.present(run.frame, input.readTouch());
       const switchView = () => { view?.toggleMode(); };
-      if (theme.diagnostics.length) extras.add(this.add.text(820, 281, '装饰缺失，已省略', { fontFamily: '"Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '14px', color: '#ffaf8c' }));
       const keyDown = (event: KeyboardEvent) => {
         if (event.ctrlKey || event.metaKey || event.altKey || this.toolbar?.isOpen() || flow.read().run?.id !== run.id) return;
         const phase = flow.read().phase;
@@ -128,7 +130,7 @@ class GameScene extends Phaser.Scene {
     } catch (error) { dispose(); throw error; }
   }
 
-  private resume(): void { if (document.visibilityState !== 'hidden' && document.hasFocus()) this.flow?.resume(); }
+  private resume(): void { if (!this.toolbar?.isOpen() && document.visibilityState !== 'hidden' && document.hasFocus()) this.flow?.resume(); }
   private fullscreen(): void {
     if (!document.documentElement.requestFullscreen || !document.exitFullscreen) {
       this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'); return;
@@ -147,7 +149,7 @@ class GameScene extends Phaser.Scene {
     updateArenaLayout(viewportWidth, viewportHeight, state.phase === 'playing');
     this.menu?.present(state);
     if (this.appearanceMode !== appearance().mode) {
-      this.appearanceMode = appearance().mode; this.cameras.main.setBackgroundColor(hex(appearance().background));
+      this.appearanceMode = appearance().mode; this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
     }
     this.toolbar?.present(state.phase, this.game.canvas.dataset.view ?? 'normal', this.acceptance?.isOpen() ?? false);
     const { run } = state;
@@ -204,7 +206,7 @@ const initialViewport = document.getElementById('game')!.getBoundingClientRect()
 let viewportWidth = initialViewport.width, viewportHeight = initialViewport.height;
 updateArenaLayout(viewportWidth, viewportHeight);
 const game = new Phaser.Game({
-  type: Phaser.AUTO, parent: 'game', backgroundColor: '#102b2c', width: arenaLayout.width, height: arenaLayout.height,
+  type: Phaser.AUTO, parent: 'game', transparent: true, width: arenaLayout.width, height: arenaLayout.height,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   fps: { target: renderFps, forceSetTimeOut: fpsParameter !== null, smoothStep: false }, scene: [GameScene],
 });
