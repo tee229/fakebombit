@@ -27,6 +27,8 @@ Fake Bomb It 提供连续四向移动、炸弹连锁、道具和1对3 AI对局�
 
 用户于2026-10-20确认与两内置主题协调的圆润街机风格，保留重要信息、操作入口、地图面积和文字可读性；先看明暗样例，再实施完整改版。
 
+2026-10-21，用户选定图2（舞台中轴）的菜单和对局，以及图1（双翼街机）的设置。明暗两版沿用同一分区选择；对应原图与选择记录位于 `.impeccable/mocks/issue-19/`。
+
 ## Evidence on Hand
 
 已确认规格位于 GitHub Issue #19；术语见 GLOSSARY.md，外观所有权见 ADR 0005。现有原创主题和皮肤 SVG 位于 public/themes、public/skins。此前手机验收记录位于 docs/validation/，只证明对应版本。

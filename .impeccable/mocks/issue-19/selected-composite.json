@@ -1,0 +1,14 @@
+{
+  "id": "selected-composite",
+  "date": "2026-10-21",
+  "prompt": "Use case: compositing UI mockups. Create ONE faithful composite approval sheet, not a new design. Two supplied images are already selected by the user. Input image 1 is center-stage.png (the user's original option 2); input image 2 is bilateral-arcade.png (original option 1).\nOutput 1536x1024, same two columns light/dark and three rows menu/game/settings.\nCopy the TOP TWO ROWS (menu AND in-game, both light and dark) from INPUT IMAGE 1 with unchanged composition, characters, theme thumbnails, centered start action, timer, actor strips, map and thumb controls.\nCopy ONLY THE BOTTOM ROW (light AND dark settings) from INPUT IMAGE 2: category sidebar at left; controls middle; POSITION PREVIEW ON RIGHT; fixed mode light/all four sliders active and floating mode dark/first two sliders disabled; reset and done footer. Keep this settings layout exactly; the paused world behind settings should follow the chosen in-game design from image 1.\nKeep the reference imagery and text. Do not invent new buttons, indicators, features, characters, style or screen arrangements. Retain the six complete landscape screens, small row labels 菜单 / 对局 / 设置 and column labels 浅色 / 深色. Use the overall title Fake Bomb It. No device frame or browser chrome. This sheet simply combines the user's selected regions into one consistent reference. Date context 2026-10-21, no calendar.",
+  "inputImages": [
+    "center-stage.png",
+    "bilateral-arcade.png"
+  ],
+  "approved": false,
+  "derivedFromApprovedRegions": true,
+  "authority": "selection.json",
+  "status": "generating",
+  "image": "selected-composite.png"
+}

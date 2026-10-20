@@ -7,6 +7,8 @@
     "D:\\Projects\\GPTProjects\\fbi\\.scratch\\issue-16-toolbar-light.jpg"
   ],
   "approved": false,
+  "approvedRegions": ["settings-light", "settings-dark"],
+  "selectedAt": "2026-10-21",
   "status": "generated",
   "mode": "builtin-image-gen",
   "currentDate": "2026-10-20",
