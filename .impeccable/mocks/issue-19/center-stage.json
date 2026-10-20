@@ -7,7 +7,11 @@
     "D:\\Projects\\GPTProjects\\fbi\\.scratch\\issue-16-toolbar-light.jpg"
   ],
   "approved": false,
-  "status": "generation-pending",
+  "status": "generated",
   "mode": "builtin-image-gen",
-  "currentDate": "2026-10-20"
+  "currentDate": "2026-10-20",
+  "image": "center-stage.png",
+  "displayOrder": 2,
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a154ca-1e33-73e1-9441-75ab47e3f0f3\\exec-4093ac5a-a972-4fed-ae15-27ba8acd76bd.png",
+  "attempts": 2
 }
