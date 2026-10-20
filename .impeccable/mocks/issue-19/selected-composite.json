@@ -9,6 +9,7 @@
   "approved": false,
   "derivedFromApprovedRegions": true,
   "authority": "selection.json",
-  "status": "generating",
-  "image": "selected-composite.png"
+  "status": "generated",
+  "image": "selected-composite.png",
+  "originalOutput": "C:\\Users\\tee\\.codex\\generated_images\\01a154ca-1e33-73e1-9441-75ab47e3f0f3\\exec-c52f0e0d-cefd-4690-94d2-6cd7defcc0bb.png"
 }

@@ -1,6 +1,6 @@
 # 首版进度与待办
 
-核对日期：2026-10-20（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **13/15**，#16 进行中，#17 等待前置验收；新增变更 #19 尚待视觉样例和实施。#1 是总规格、#2 是架构规格，不计入原15个实施任务。
+核对日期：2026-10-21（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **13/15**，#16 进行中，#17 等待前置验收；新增变更 #19 已选定视觉分区，待页面和功能实施。#1 是总规格、#2 是架构规格，不计入原15个实施任务。
 
 | 任务 | 状态 | 已交付内容 |
 | --- | --- | --- |
@@ -9,13 +9,13 @@
 | #9–#11 | 完成 | 危险预测、逃生AI、安全种子地图、正常1对3对局 |
 | #12–#15 | 完成 | 两主题、两皮肤、完整流程、视听反馈 |
 | #18 | 完成，附加修复 | 移除人物名称遮挡、两侧实时状态卡；不增加实施任务计数 |
-| [#19](https://github.com/tee229/fakebombit/issues/19) | 已选菜单/对局图2、设置图1 | 明暗两版按此分区组合，正在生成统一参考图，随后进入页面制作 |
+| [#19](https://github.com/tee229/fakebombit/issues/19) | 已选菜单/对局图2、设置图1 | 明暗两版统一参考图已归档，下一步制作页面和正式功能 |
 | [#16](https://github.com/tee229/fakebombit/issues/16) | 进行中 | 三浏览器旧版报告已收齐；用户确认新版布局与工具栏复测通过，新版报告及首局长帧结论待补 |
 | [#17](https://github.com/tee229/fakebombit/issues/17) | 等待 #16 | 微信小游戏适配与真机验证；浏览器版通过后再开始 |
 
 ## 当前任务：#16 手机浏览器体验与性能验收
 
-2026-10-20 用户确认追加需求 [#19](https://github.com/tee229/fakebombit/issues/19)，访谈 Q1–Q11 全部接受。本轮明确采用图片优先，现已制作三套明暗菜单、局内与设置图片，见[候选索引](../.impeccable/mocks/issue-19/README.md)，等待用户选定后制作页面与正式功能，再复验受影响项目；已有布局/工具栏通过记录保留其适用版本，不据此宣告改版后验收通过。完整规格保存在 GitHub Issue，领域决定见 [ADR 0005](adr/0005-theme-appearance-independent-of-match.md)。
+2026-10-20 用户确认追加需求 [#19](https://github.com/tee229/fakebombit/issues/19)，访谈 Q1–Q11 全部接受，并采用图片优先。2026-10-21 用户选定图2的菜单和对局、图1的设置，明暗两版已整理为[统一参考图](../.impeccable/mocks/issue-19/selected-composite.png)。下一步按此制作页面与正式功能，再复验受影响项目；已有布局/工具栏通过记录保留其适用版本，不据此宣告改版后验收通过。完整规格保存在 GitHub Issue，领域决定见 [ADR 0005](adr/0005-theme-appearance-independent-of-match.md)。
 
 - [x] 确认 OPPO Find X8 / Android 17，Edge、Chrome、DuckDuckGo及正式17×15、1对3验收标准。
 - [x] 实现本地性能采样、报告导出、规则测量优化，并保留复现结果。

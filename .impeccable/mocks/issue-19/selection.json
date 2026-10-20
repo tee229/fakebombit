@@ -1,11 +1,30 @@
 {
   "selectedAt": "2026-10-21",
   "source": "User: 菜单和对局使用图2的，设置使用图1的",
-  "menu": { "image": "center-stage.png", "originalDisplayOrder": 2, "region": "top row, light and dark", "approved": true },
-  "inGame": { "image": "center-stage.png", "originalDisplayOrder": 2, "region": "middle row, light and dark", "approved": true },
-  "settings": { "image": "bilateral-arcade.png", "originalDisplayOrder": 1, "region": "bottom row, light and dark", "approved": true },
+  "menu": {
+    "image": "center-stage.png",
+    "originalDisplayOrder": 2,
+    "region": "top row, light and dark",
+    "approved": true
+  },
+  "inGame": {
+    "image": "center-stage.png",
+    "originalDisplayOrder": 2,
+    "region": "middle row, light and dark",
+    "approved": true
+  },
+  "settings": {
+    "image": "bilateral-arcade.png",
+    "originalDisplayOrder": 1,
+    "region": "bottom row, light and dark",
+    "approved": true
+  },
   "otherRegionsApproved": false,
-  "composite": { "status": "generating", "approved": false },
+  "composite": {
+    "status": "generated",
+    "approved": false,
+    "image": "selected-composite.png"
+  },
   "requirementsAuthority": "https://github.com/tee229/fakebombit/issues/19",
   "implementationConstraints": [
     "The position preview must show the whole landscape safe area; margins are never measured from the map edge.",

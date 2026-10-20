@@ -1,6 +1,6 @@
 # Fake Bomb It
 
-原15项首版实施进度 **13/15**；当前为 #16 手机浏览器体验与性能验收，#17 微信小游戏适配等待浏览器验收通过。新增 [#19 UI、主题包明暗与触屏操作变更](https://github.com/tee229/fakebombit/issues/19)已完成[三套明暗视觉图片](.impeccable/mocks/issue-19/README.md)，待用户选定后制作页面。完整已完成项与剩余清单见[实施进度](docs/implementation-status.md)。
+原15项首版实施进度 **13/15**；当前为 #16 手机浏览器体验与性能验收，#17 微信小游戏适配等待浏览器验收通过。新增 [#19 UI、主题包明暗与触屏操作变更](https://github.com/tee229/fakebombit/issues/19)已选定图2的菜单和对局、图1的设置，明暗两版已整理为[统一参考图](.impeccable/mocks/issue-19/selected-composite.png)，下一步按此制作页面。完整已完成项与剩余清单见[实施进度](docs/implementation-status.md)。
 
 Issues #3–#11 implement headless movement, bombs, power-ups, normal AI battles and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
