@@ -14,6 +14,7 @@ import { preloadFeedbackAudio } from './feedback-audio.js';
 import { AcceptancePanel } from './acceptance-panel.js';
 import { GameToolbar } from './game-toolbar.js';
 import { appearance } from './appearance.js';
+import { BackgroundMusic } from './background-music.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
@@ -22,12 +23,14 @@ class GameScene extends Phaser.Scene {
   private menu: ThemeMenu | undefined;
   private acceptance: AcceptancePanel | undefined;
   private toolbar: GameToolbar | undefined;
+  private music: BackgroundMusic | undefined;
   private appearanceMode = '';
   private arena: Arena = 'generated';
   private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
   preload(): void { preloadMenu(this); preloadFeedbackAudio(this); }
   create(): void {
+    this.music = new BackgroundMusic();
     if (new URLSearchParams(location.search).get('acceptance') === '1') this.acceptance = new AcceptancePanel(this.game.canvas);
     this.flow = createGameFlow({ resources, selection: diagnosticPackage(withSkin(builtinThemes[0]!, builtinSkins[0]!)),
       makeMatch: (theme, initialization) => { const started = this.acceptance ? performance.now() : 0;
@@ -39,10 +42,11 @@ class GameScene extends Phaser.Scene {
     this.toolbar = new GameToolbar({ pause: () => { this.flow?.pause(); }, resume: () => this.resume(),
       fullscreen: () => this.fullscreen(), switchView: () => this.live?.view.toggleMode(),
       menu: () => { this.flow?.returnToMenu(); }, focusCanvas: () => this.game.canvas.focus({ preventScroll: true }),
+      musicVolumeChanged: () => this.music?.refreshVolume(),
       controlsChanged: () => { this.live?.controls.clear(); updateArenaLayout(viewportWidth, viewportHeight, this.flow?.read().phase === 'playing'); } });
     const canvas = this.game.canvas;
     canvas.tabIndex = 0; canvas.setAttribute('role', 'application'); canvas.setAttribute('aria-describedby', 'instructions'); canvas.focus({ preventScroll: true });
-    const background = () => { this.acceptance?.interrupt(); this.flow?.pause('background'); };
+    const background = () => { this.music?.present(false); this.acceptance?.interrupt(); this.flow?.pause('background'); };
     const visibility = () => { if (document.visibilityState === 'hidden') background(); };
     const resize = () => {
       this.live?.controls.clear();
@@ -62,6 +66,7 @@ class GameScene extends Phaser.Scene {
       this.flow?.dispose(); this.menu?.destroy(); this.flow = undefined; this.menu = undefined;
       this.acceptance?.dispose(); this.acceptance = undefined;
       this.toolbar?.destroy(); this.toolbar = undefined;
+      this.music?.dispose(); this.music = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
       window.removeEventListener('resize', resize); document.removeEventListener('fullscreenchange', resize); document.removeEventListener('visibilitychange', visibility);
       viewportObserver.disconnect();
@@ -123,7 +128,7 @@ class GameScene extends Phaser.Scene {
       this.status('本局已开始。摇杆或方向键移动，空格放弹；P 暂停，R 重试，N 新开，M 返回菜单。');
       this.acceptance?.beginRun(run, this.arena);
       return { dispose,
-        pause: () => { controls?.clear(); view?.stopAudio(); this.sound.pauseAll(); this.status('对局已暂停。可调整操作、音量和特效，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
+        pause: () => { controls?.clear(); view?.stopAudio(); this.music?.present(false); this.sound.pauseAll(); this.status('对局已暂停。可调整操作、音量和特效，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
         resume: () => { controls?.clear(); this.sound.resumeAll(); this.status('已继续。重新操作摇杆或方向键移动。'); },
       };
     } catch (error) { dispose(); throw error; }
@@ -145,6 +150,7 @@ class GameScene extends Phaser.Scene {
     if (document.visibilityState === 'hidden') this.flow.pause('background');
     const state = this.flow.advanceFrame(this.game.loop.rawDelta);
     const logicDoneAt = this.acceptance ? performance.now() : 0;
+    this.music?.present(state.phase !== 'paused' && state.phase !== 'disposed' && document.visibilityState === 'visible' && document.hasFocus() && !this.acceptance?.isOpen());
     updateArenaLayout(viewportWidth, viewportHeight, state.phase === 'playing');
     this.menu?.present(state);
     if (this.appearanceMode !== appearance().mode) {

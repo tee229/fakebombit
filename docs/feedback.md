@@ -14,11 +14,19 @@ Explosion impact lasts 240 ms; destruction and elimination accents last 450 ms; 
 
 ## Budget and controls
 
-At most 32 transient effects and 6 sound cues per frame are retained; elimination/pickup sounds have precedence in a dense chain. The default live particle budget is 96. Menu and pause buttons cycle rich 96 / lean 32 / off 0; the public interface accepts integer budgets 0–256. Changing budget may discard particles, never gameplay facts or pickup gain labels. `prefers-reduced-motion` removes all debris and spatial expansion while retaining static rings, live danger and text gain feedback.
+At most 32 transient effects and 6 sound cues per frame are retained; elimination/pickup sounds have precedence in a dense chain. The default live particle budget is 96. The settings effects tab selects rich 96 / lean 32 / off 0; the public interface accepts integer budgets 0–256. Changing budget may discard particles, never gameplay facts or pickup gain labels. `prefers-reduced-motion` removes all debris and spatial expansion while retaining static rings, live danger and text gain feedback.
 
-Volume defaults to 45%; buttons cycle 75%, off, 25%, 45%. The interface accepts finite volume 0–1. Settings belong to this application session and survive retry/new/return; they are not persisted to browser storage. Invalid settings fail atomically. No presentation setting affects the match seed or its streams.
+Sound-effect volume defaults to 45%; background-music volume defaults to 35%. The audio tab exposes independent 0–100% sliders. Settings survive retry/new/return and are persisted in `fakebombit-feedback-v1`; the existing `volume` field remains sound-effect volume, while missing `musicVolume` is filled with its default. Particle, appearance and control preferences are preserved. Operation reset changes neither volume. Invalid settings fail atomically. No presentation setting affects the match seed or its streams.
 
 `FeedbackAudio` uses optional built-in PCM WAV files loaded by Phaser. Each run owns at most eight voices. Missing/locked sound is skipped immediately and never queued for unlock; Phaser handles the initiating gesture. Completion destroys voices. Pause, switching to Entities, changing volume and leaving the run destroy current voices, so resume does not replay an interrupted cue. Application decoded audio stays cached. See [original audio authoring](../public/audio/README.md) and `pnpm art:feedback`.
+
+## Background music
+
+Issue #20 explicitly adds the user-provided `public/audio/fbi-bgm.mp3`, superseding the earlier image-proposal constraint against unrequested music. `BackgroundMusic` owns one application-lifetime HTML audio element with looping enabled and metadata preload. It streams independently of Phaser's run-owned sound-effect voices and is released on scene shutdown/HMR. The provided file is unchanged; provenance and SHA-256 are in `public/audio/README.md`.
+
+First pointer/keyboard interaction enables playback. Menu, preparation, play and result screens share the same track position; retry/new/return do not create another instance. Manual/background match pause silences music, closing settings leaves the match paused, and manual resume continues the existing position. Menu settings can play music while adjusting its volume. Hiding/leaving the page stops playback through the existing lifecycle boundary; returning to a paused match does not resume it. Muting either channel changes only that channel. Play failures are caught and retried on a subsequent user gesture or permitted foreground transition, without delaying gameplay or queuing event sounds.
+
+Browser playback diagnostics are attached to the audio element (`data-background-music`, state, volume, position and duration); the pre-existing Phaser voice counters still describe effect voices.
 
 ## Evidence
 

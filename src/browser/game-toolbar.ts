@@ -1,11 +1,11 @@
 import { appearance, toggleAppearance } from './appearance.js';
-import { readFeedbackSettings, setVolume, setParticleBudget } from './feedback-settings.js';
+import { readFeedbackSettings, setVolume, setMusicVolume, setParticleBudget } from './feedback-settings.js';
 import type { GameFlowState } from '../game-flow/index.js';
 import { icon, type Icon } from './ui-icons.js';
 import { arenaLayout, controlGeometry } from './layout.js';
 import { controlMarginLimit, controlRevision, readControlPreferences, resetControlPreferences, updateControlPreferences, type MarginName } from './control-preferences.js';
 
-type Commands = { pause(): void; resume(): void; fullscreen(): void; switchView(): void; menu(): void; focusCanvas(): void; controlsChanged(): void };
+type Commands = { pause(): void; resume(): void; fullscreen(): void; switchView(): void; menu(): void; focusCanvas(): void; controlsChanged(): void; musicVolumeChanged(): void };
 const margins: readonly [MarginName, string][] = [['joystickLeft', '摇杆距左'], ['joystickBottom', '摇杆距底'], ['bombRight', '放弹距右'], ['bombBottom', '放弹距底']];
 
 /** Accessible toolbar and modal own focus; closing settings always leaves manual pause. */
@@ -32,7 +32,7 @@ export class GameToolbar {
       <section id="panel-controls" role="tabpanel" aria-labelledby="tab-controls" class="control-panel"><div class="control-fields"><fieldset class="joystick-modes"><legend>摇杆模式</legend><label><input type="radio" name="joystick-mode" value="fixed"><span>固定摇杆</span></label><label><input type="radio" name="joystick-mode" value="floating"><span>浮动摇杆</span></label></fieldset>
         <div class="margin-fields">${margins.map(([name,label]) => `<label class="margin-row" data-margin="${name}"><span>${label}</span><input type="range" min="0" max="${controlMarginLimit}" step="1" aria-label="${label}"><output></output></label>`).join('')}</div><p class="control-explanation"></p></div>
       <section class="position-preview" aria-label="整个横屏安全区的位置预览"><h3>位置预览</h3><div class="preview-viewport"><div class="preview-map"></div><div class="preview-control preview-joystick">${icon('gamepad')}</div><div class="preview-control preview-bomb">${icon('bomb')}</div><span class="preview-edge preview-left"></span><span class="preview-edge preview-right"></span><span class="preview-edge preview-bottom-left"></span><span class="preview-edge preview-bottom-right"></span></div><p>控件外缘到屏幕安全区边缘</p></section></section>
-      <section id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" class="feedback-panel" hidden><h3>游戏音量</h3><p>调整放弹、爆炸与拾取声音</p><label class="volume-row"><input type="range" min="0" max="100" step="1" aria-label="游戏音量"><output></output></label></section>
+      <section id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" class="feedback-panel" hidden><h3>声音设置</h3><p>背景音乐与爆炸、拾取等音效分别调节</p><label class="volume-row music-volume-row"><span>背景音乐</span><input type="range" min="0" max="100" step="1" aria-label="背景音乐音量"><output></output></label><label class="volume-row effects-volume-row"><span>音效</span><input type="range" min="0" max="100" step="1" aria-label="音效音量"><output></output></label></section>
       <section id="panel-effects" role="tabpanel" aria-labelledby="tab-effects" class="feedback-panel" hidden><h3>粒子效果</h3><p>减少粒子不改变火焰与危险范围</p><div class="particle-options">${[[96,'丰富'],[32,'精简'],[0,'关闭']].map(([value,label]) => `<button type="button" class="secondary-button" data-particles="${value}">${label}</button>`).join('')}</div><p class="motion-note"></p></section></div>
       <footer><button type="button" class="secondary-button reset-controls">恢复操作默认值</button><button type="button" class="secondary-button settings-menu">返回菜单</button><button type="button" class="primary-button settings-done">完成</button></footer>`;
     for (const tab of this.dialog.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
@@ -52,7 +52,8 @@ export class GameToolbar {
       updateControlPreferences({ [name]: Number((event.target as HTMLInputElement).value) }); this.controlsChanged();
     });
     this.dialog.querySelector('.reset-controls')!.addEventListener('click', () => { resetControlPreferences(); this.controlsChanged(); });
-    this.dialog.querySelector('.volume-row input')!.addEventListener('input', event => { setVolume(Number((event.target as HTMLInputElement).value) / 100); this.refresh(); });
+    this.dialog.querySelector('.effects-volume-row input')!.addEventListener('input', event => { setVolume(Number((event.target as HTMLInputElement).value) / 100); this.refresh(); });
+    this.dialog.querySelector('.music-volume-row input')!.addEventListener('input', event => { setMusicVolume(Number((event.target as HTMLInputElement).value) / 100); commands.musicVolumeChanged(); this.refresh(); });
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-particles]')) button.addEventListener('click', () => { setParticleBudget(Number(button.dataset.particles)); this.refresh(); });
     this.dialog.querySelector('.settings-close')!.addEventListener('click', () => this.close());
     this.dialog.querySelector('.settings-done')!.addEventListener('click', () => this.close());
@@ -88,8 +89,10 @@ export class GameToolbar {
       if (!input.disabled && Math.abs(desired - actual) > 1) constrained = true;
     }
     this.dialog.querySelector('.control-explanation')!.textContent = floating ? '左侧操作区按下定位，拖动后移动；固定位置已保留。' : constrained ? '本屏已约束实际位置；更大屏幕会恢复偏好。' : '四项独立调整，位置实时预览。';
-    const volume = this.dialog.querySelector<HTMLInputElement>('.volume-row input')!; volume.value = String(Math.round(feedback.volume * 100));
-    this.dialog.querySelector('.volume-row output')!.textContent = `${Math.round(feedback.volume * 100)}%`;
+    for (const [selector, value] of [['.music-volume-row', feedback.musicVolume], ['.effects-volume-row', feedback.volume]] as const) {
+      this.dialog.querySelector<HTMLInputElement>(`${selector} input`)!.value = String(Math.round(value * 100));
+      this.dialog.querySelector(`${selector} output`)!.textContent = `${Math.round(value * 100)}%`;
+    }
     for (const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-particles]')) button.setAttribute('aria-pressed', String(Number(button.dataset.particles) === feedback.particleBudget));
     this.dialog.querySelector('.motion-note')!.textContent = feedback.reducedMotion ? '已遵循系统减少动态效果偏好。' : '';
     this.dialog.querySelector<HTMLButtonElement>('.settings-menu')!.hidden = this.phase === 'menu';

@@ -134,8 +134,9 @@ input[type="range"] { width: 100%; min-width: 0; margin: 0; accent-color: var(--
 .preview-left { left: 0; top: 50%; }.preview-right { right: 0; top: 50%; }.preview-bottom-left { left: 8%; bottom: 0; }.preview-bottom-right { right: 8%; bottom: 0; }
 .feedback-panel { background: var(--ui-surface); border: 1px solid var(--ui-border); padding: 24px; border-radius: 20px; min-height: 260px; }
 .feedback-panel p { color: var(--ui-muted); font-size: 14px; }
-.volume-row { display: flex; gap: 20px; align-items: center; margin-top: 36px; }
-.volume-row output { width: 60px; font-weight: 700; }
+.volume-row { display: grid; grid-template-columns: 88px minmax(60px, 1fr) 48px; gap: 16px; align-items: center; margin-top: 20px; min-height: 36px; }
+.volume-row > span { font-weight: 700; font-size: 14px; }
+.volume-row output { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
 .particle-options { display: flex; gap: 12px; margin-top: 24px; }
 .particle-options [aria-pressed="true"] { border-color: var(--ui-accent); background: var(--ui-selected); }
 .game-settings footer { display: flex; gap: 12px; margin-top: 18px; }

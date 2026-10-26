@@ -16,7 +16,7 @@ Open <http://127.0.0.1:5173/?arena=escape> to watch one AI escape a repeatable c
 
 Open <http://127.0.0.1:5173/?arena=normal> for a controlled normal-AI escape-sealing exercise. Three normal AIs share a dead-end spawn; all use ordinary movement, abilities and bomb rules. After R, immediately place a bomb, move left and then down to leave its rays. Sealing their exit demonstrates a real victory through ordinary intents. This fixed diagnostic layout verifies the outcome flow and is not a random-map difficulty sample.
 
-菜单设置按钮或局内工具栏可打开设置。操作页独立调整摇杆距左/距底、放弹距右/距底，数值从控件外缘量到屏幕安全区边缘；浮动模式在左侧操作区按下定位，拖动后移动，松手隐藏，并保留固定位置。边距随当前视口约束而不覆盖偏好，恢复操作默认值不改音量、粒子或明暗。设置跨访问保存；局内打开会暂停，关闭后手动继续。明暗开关同时切换界面与当前主题包，两种外观开局前均准备，切换保留本局进度。
+菜单设置按钮或局内工具栏可打开设置。操作页独立调整摇杆距左/距底、放弹距右/距底，数值从控件外缘量到屏幕安全区边缘；浮动模式在左侧操作区按下定位，拖动后移动，松手隐藏，并保留固定位置。边距随当前视口约束而不覆盖偏好，恢复操作默认值不改音量、粒子或明暗。音量分类可独立调节背景音乐与音效；用户提供的背景音乐在首次操作后循环播放，跨局不叠加，暂停后手动恢复会接着播放。两种音量和其他设置跨访问保存；局内打开会暂停，关闭后手动继续。明暗开关同时切换界面与当前主题包，两种外观开局前均准备，切换保留本局进度。
 
 The browser uses Vite **8.3.4** and Phaser **3.90.0**, verified against the npm registry and official documentation during implementation. Phaser 3 supplies Canvas/WebGL rendering and the documented scene/scale interfaces; the registry's current Phaser 4 release was also checked. `pnpm build` writes the production browser build to `dist/web`; `pnpm preview` serves it on <http://127.0.0.1:4173/>. Headless output remains in `dist/match` and `dist/demo`.
 
