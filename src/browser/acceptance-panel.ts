@@ -110,6 +110,7 @@ export class AcceptancePanel {
     this.openButton.hidden = this.isOpen() || !['menu', 'paused', 'result'].includes(state.phase);
     if (!this.openButton.hidden) {
       const bounds = this.canvas.getBoundingClientRect(), menu = state.phase === 'menu';
+      this.openButton.style.transform = menu ? 'none' : '';
       this.openButton.style.left = `${menu ? bounds.left + 12 : bounds.left + bounds.width * arenaLayout.report.x / arenaLayout.width}px`;
       this.openButton.style.top = `${menu ? bounds.bottom - this.openButton.offsetHeight - 12 : bounds.top + bounds.height * arenaLayout.report.y / arenaLayout.height}px`;
     }

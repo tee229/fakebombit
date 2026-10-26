@@ -20,6 +20,10 @@ for (const mode of ['floating', 'fixed']) {
       page.setDefaultTimeout(5000);
       await page.goto(`${url}?arena=training&acceptance=1${mode === 'floating' ? '&touchTrace=1' : ''}`);
       await page.getByRole('button', { name: '返回游戏并记录', exact: true }).click();
+      await page.getByRole('button', { name: '验收报告', exact: true }).waitFor({ state: 'visible' });
+      const reportButton = await page.getByRole('button', { name: '验收报告', exact: true }).boundingBox();
+      assert.ok(reportButton.x >= 12, 'diagnostic entry must stay inside the screen');
+      assert.ok(reportButton.y + reportButton.height <= 388, 'diagnostic entry must keep its bottom margin');
       await page.getByRole('button', { name: '打开设置', exact: true }).click();
       await page.getByRole('radio', { name: mode === 'floating' ? '浮动摇杆' : '固定摇杆', exact: true }).check();
       await page.getByRole('button', { name: '完成', exact: true }).click();
