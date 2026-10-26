@@ -27,6 +27,10 @@
 
 ## 本地启动与回归
 
+双指断触诊断（#21）：在原地址保留已有参数并加上 `acceptance=1&touchTrace=1`。关闭表单，选择浮动摇杆并开局，复现后立即暂停、打开“验收报告”并下载 JSON。新增 `inputTrace` 只在此模式记录，最多保留最近200项指针、方向/中心变化、窗口大小、后台与焦点事件；移动事件最多每100ms一条。记录只在当前页面内存中，下载后手动提供，不自动上传。该模式不计作正式性能验收，普通 `acceptance=1` 不启用触控记录。
+
+`pnpm test:browser-touch` 启动独立无头 Chromium 和仅绑定127.0.0.1的临时开发服务器，验证固定/浮动摇杆与放弹的原生双触点、右手松开后角色继续移动，以及真实取消清理。首次可用 `pnpm exec playwright install chromium` 安装测试浏览器；也可设置环境变量 `PLAYWRIGHT_CHANNEL=chrome` 或 `msedge` 使用已安装的浏览器，仍创建独立测试配置，不访问个人标签页。该检查单独运行，不加入无需浏览器的 `pnpm check`。桌面触控模拟不能替代手机复现。
+
 `pnpm check` 运行规则、输入、流程、资源与统计回归，并构建生产版本。随后使用 `pnpm exec vite preview --host 0.0.0.0 --port 4173` 提供仅包含生产产物的局域网预览。不要把 Vite 开发服务器当作最终性能版本。停止该进程即可停止本次预览。
 
 `pnpm benchmark:match` 对三个正式种子测量3600步的桌面规则开销；`pnpm benchmark:match --seed=issue16-baseline-c --trace` 另生成完整世界/事件 SHA-256。trace 会增加额外内存与计算负担，其耗时不用于对比性能。基线摘要见[验收记录](validation/issue-16-mobile-acceptance.md)。

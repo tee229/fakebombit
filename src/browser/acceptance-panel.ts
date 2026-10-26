@@ -21,6 +21,10 @@ export class AcceptancePanel {
   private current: RunRecord | undefined;
   private creationMs = 0;
   private readonly errors: string[] = [];
+  private readonly captureInput = new URLSearchParams(location.search).get('touchTrace') === '1';
+  private readonly inputTrace: Record<string, unknown>[] = [];
+  private lastInput = '';
+  private lastMoveAt = 0;
   private readonly status: HTMLElement;
   private readonly report: HTMLTextAreaElement;
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -56,6 +60,24 @@ export class AcceptancePanel {
     this.root.addEventListener('change', () => this.refresh(), { signal });
     window.addEventListener('error', event => { if (this.errors.length < 20) this.errors.push(event.message); }, { signal });
     window.addEventListener('unhandledrejection', event => { if (this.errors.length < 20) this.errors.push(String(event.reason)); }, { signal });
+    if (this.captureInput) {
+      for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'gotpointercapture', 'lostpointercapture']) {
+        document.addEventListener(type, event => {
+          if (!(event instanceof PointerEvent) || !(event.target instanceof Element)) return;
+          const control = event.target.closest('.touch-button');
+          if (event.target !== canvas && !control) return;
+          if (type === 'pointermove') {
+            if (performance.now() - this.lastMoveAt < 100) return;
+            this.lastMoveAt = performance.now();
+          }
+          this.traceInput(type, { pointerId: event.pointerId, pointerType: event.pointerType,
+            target: control?.classList.contains('bomb-control') ? 'bomb' : control ? 'joystick' : 'canvas',
+            x: event.clientX, y: event.clientY, captured: canvas.hasPointerCapture(event.pointerId) });
+        }, { capture: true, signal });
+      }
+      for (const type of ['resize', 'blur', 'pagehide']) window.addEventListener(type, () => this.traceInput(type), { signal });
+      document.addEventListener('visibilitychange', () => this.traceInput('visibilitychange', { visibility: document.visibilityState }), { signal });
+    }
     this.refresh();
   }
   recordCreation(durationMs: number): void { this.creationMs = durationMs; }
@@ -65,7 +87,7 @@ export class AcceptancePanel {
       seed: world.initialization.seed, width: world.initialMap.width, height: world.initialMap.height,
       aiCount: world.actors.filter(actor => actor.ai).length, arena, theme: run.theme.id, skin: run.theme.package.skin?.id,
       eligibleSetup: arena === 'generated' && world.initialMap.width === 17 && world.initialMap.height === 15
-        && world.actors.filter(actor => actor.ai).length === 3 && !['arena', 'ai', 'seconds', 'fps', 'resourceError', 'loadDelay'].some(name => url.searchParams.has(name))
+        && world.actors.filter(actor => actor.ai).length === 3 && !this.captureInput && !['arena', 'ai', 'seconds', 'fps', 'resourceError', 'loadDelay'].some(name => url.searchParams.has(name))
         && world.initialization.rules.matchDurationSeconds === 120,
       creationMs: this.creationMs, initialization: world.initialization, settingsAtStart: readFeedbackSettings(),
     } };
@@ -79,18 +101,27 @@ export class AcceptancePanel {
   isOpen(): boolean { return !this.root.hidden; }
   focus(): void { this.root.querySelector<HTMLInputElement>('input')!.focus(); }
   frame(state: GameFlowState<HTMLImageElement>, sample: PerformanceSample): void {
+    if (this.captureInput) {
+      const input = `${state.run?.id}:${state.phase}:${this.canvas.dataset.joystick}:${this.canvas.dataset.joystickCenter}`;
+      if (input !== this.lastInput) { this.lastInput = input; this.traceInput('input-state', { runId: state.run?.id }); }
+    }
     this.current?.metrics.sample(sample);
     if (this.current && (!sample.active || (state.run?.frame.world.tick ?? 0) % 60 === 0)) this.canvas.dataset.acceptanceMetrics = JSON.stringify(this.current.metrics.read());
     this.openButton.hidden = this.isOpen() || !['menu', 'paused', 'result'].includes(state.phase);
     if (!this.openButton.hidden) {
       const bounds = this.canvas.getBoundingClientRect(), menu = state.phase === 'menu';
-      const menuX = arenaLayout.compact ? 64 / arenaLayout.cssScale : (arenaLayout.width - 1024) / 2 + 100;
-      const menuY = arenaLayout.compact ? 22 / arenaLayout.cssScale : (arenaLayout.height - 576) / 2 + 35;
-      this.openButton.style.left = `${bounds.left + bounds.width * (menu ? menuX : arenaLayout.report.x) / arenaLayout.width}px`;
-      this.openButton.style.top = `${bounds.top + bounds.height * (menu ? menuY : arenaLayout.report.y) / arenaLayout.height}px`;
+      this.openButton.style.left = `${menu ? bounds.left + 12 : bounds.left + bounds.width * arenaLayout.report.x / arenaLayout.width}px`;
+      this.openButton.style.top = `${menu ? bounds.bottom - this.openButton.offsetHeight - 12 : bounds.top + bounds.height * arenaLayout.report.y / arenaLayout.height}px`;
     }
   }
   private value(selector: string): string { return this.root.querySelector<HTMLInputElement>(selector)!.value.trim(); }
+  private traceInput(type: string, fields: Record<string, unknown> = {}): void {
+    this.inputTrace.push({ atMs: Math.round(performance.now()), type, ...fields, phase: this.canvas.dataset.phase,
+      direction: this.canvas.dataset.joystick, center: this.canvas.dataset.joystickCenter,
+      mode: this.canvas.dataset.controlMode, layoutRevision: this.canvas.dataset.layoutRevision,
+      viewport: [innerWidth, innerHeight] });
+    if (this.inputTrace.length > 200) this.inputTrace.shift();
+  }
   private snapshot() {
     const resources = performance.getEntriesByType('resource').flatMap(entry => {
       if (!(entry instanceof PerformanceResourceTiming)) return [];
@@ -105,6 +136,7 @@ export class AcceptancePanel {
       criteria: { continuousMs: 60000, segmentSelection: 'longest-continuous', minimumAverageFps: 55, maximumP95FrameMs: 33, maximumFrameMs: 200, p95ResolutionMs: .1 },
       manualChecks: Object.fromEntries(checks.map(([id]) => [id, this.root.querySelector<HTMLInputElement>(`input[name="${id}"]`)!.checked])),
       notes: this.value('#acceptance-notes'), errors: [...this.errors], resources,
+      inputTrace: this.captureInput ? { limit: 200, moveThrottleMs: 100, events: [...this.inputTrace] } : undefined,
       runs: this.runs.map(run => ({ id: run.id, ended: run.ended, ...run.metadata, performance: run.metrics.read() })),
       limitation: 'Update-loop intervals and CPU durations; not GPU or input-to-photon timings. Performance pass alone is not device acceptance.',
     };
@@ -113,6 +145,7 @@ export class AcceptancePanel {
     const run = this.runs.at(-1), latest = run?.metrics.read();
     const qualification = latest?.qualification;
     this.status.textContent = latest && qualification ? `${run?.metadata.eligibleSetup ? '最近一局' : '非正式配置，仅诊断'}：最长连续片段 ${(qualification.foregroundMs / 1000).toFixed(1)}秒；平均 ${qualification.averageFps?.toFixed(1) ?? '—'} FPS；P95 ${qualification.p95FrameMs?.toFixed(1) ?? '—'} ms；${({ insufficient: '时长不足，继续测量', pass: '性能样本达标，仍需真机检查', fail: '存在性能问题，请发回报告' })[latest.verdict]}` : '尚无对局记录。先返回游戏，选择外观并开始正式对局。';
+    if (this.captureInput) this.status.textContent = `触控诊断已启用：复现后立即暂停并下载报告；此模式不作性能验收。${this.status.textContent}`;
     this.report.value = JSON.stringify(this.snapshot(), null, 2);
     this.root.querySelector<HTMLButtonElement>('#acceptance-download')!.disabled = this.runs.length === 0;
   }
