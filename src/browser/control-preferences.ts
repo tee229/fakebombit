@@ -9,6 +9,7 @@ export interface ControlPreferences {
 }
 const defaults: ControlPreferences = { mode: 'fixed', joystickLeft: null, joystickBottom: null, bombRight: null, bombBottom: null };
 const key = 'fakebombit-controls-v1';
+export const controlMarginLimit = 240;
 const marginNames: readonly MarginName[] = ['joystickLeft', 'joystickBottom', 'bombRight', 'bombBottom'];
 let preferences = { ...defaults }, revision = 0;
 try {
@@ -17,7 +18,7 @@ try {
     if ('mode' in saved && saved.mode === 'floating') preferences.mode = 'floating';
     for (const name of marginNames) {
       const value = Reflect.get(saved, name);
-      if (typeof value === 'number' && Number.isFinite(value)) preferences[name] = Math.round(Math.max(0, Math.min(240, value)));
+      if (typeof value === 'number' && Number.isFinite(value)) preferences[name] = Math.round(Math.max(0, Math.min(controlMarginLimit, value)));
     }
   }
 } catch { /* Existing appearance/audio settings remain independent of new control fields. */ }
@@ -28,7 +29,7 @@ export function updateControlPreferences(patch: Partial<ControlPreferences>): vo
   if (patch.mode === 'fixed' || patch.mode === 'floating') next.mode = patch.mode;
   for (const name of marginNames) {
     const value = patch[name];
-    if (value === null || typeof value === 'number' && Number.isFinite(value)) next[name] = value === null ? null : Math.round(Math.max(0, Math.min(240, value)));
+    if (value === null || typeof value === 'number' && Number.isFinite(value)) next[name] = value === null ? null : Math.round(Math.max(0, Math.min(controlMarginLimit, value)));
   }
   preferences = next; revision++;
   try { localStorage.setItem(key, JSON.stringify(preferences)); } catch { /* Changes still work for this visit. */ }

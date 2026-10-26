@@ -77,13 +77,12 @@ class GameScene extends Phaser.Scene {
     this.menu?.hide();
     const canvas = this.game.canvas;
     for (const name of Object.keys(canvas.dataset)) delete canvas.dataset[name];
-    const extras = this.add.container();
     let view: MatchView | undefined, controls: CanvasControls | undefined, disposed = false;
     const detach: (() => void)[] = [];
     const dispose = () => {
       if (disposed) return; disposed = true;
       for (const remove of detach.splice(0)) remove();
-      controls?.destroy(); view?.destroy(); extras.destroy(true); this.sound.stopAll();
+      controls?.destroy(); view?.destroy(); this.sound.stopAll();
       this.acceptance?.endRun(run.id);
       if (this.live?.id === run.id) this.live = undefined;
     };
@@ -124,7 +123,7 @@ class GameScene extends Phaser.Scene {
       this.status('本局已开始。摇杆或方向键移动，空格放弹；P 暂停，R 重试，N 新开，M 返回菜单。');
       this.acceptance?.beginRun(run, this.arena);
       return { dispose,
-        pause: () => { controls?.clear(); view?.stopAudio(); this.sound.pauseAll(); this.status('对局已暂停。可调音量和粒子，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
+        pause: () => { controls?.clear(); view?.stopAudio(); this.sound.pauseAll(); this.status('对局已暂停。可调整操作、音量和特效，点击继续游戏或按 Enter 手动继续，也可返回菜单。'); },
         resume: () => { controls?.clear(); this.sound.resumeAll(); this.status('已继续。重新操作摇杆或方向键移动。'); },
       };
     } catch (error) { dispose(); throw error; }

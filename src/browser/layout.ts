@@ -49,7 +49,7 @@ export function updateArenaLayout(viewportWidth: number, viewportHeight: number,
     Object.assign(arenaLayout.board, { x: leftWing / s, y: (belowToolbar ? 52 : 8) / s,
       width: (viewportWidth - leftWing - rightWing) / s, height: (viewportHeight - (belowToolbar ? 60 : 16)) / s });
     Object.assign(arenaLayout.actorCards, { left: 12 / s, right: (viewportWidth - rightWing + 12) / s,
-      top: 32 / s, rightTop: 52 / s, width: (Math.min(leftWing, rightWing) - 24) / s, height: 28 / s, gap: 4 / s });
+      top: 32 / s, rightTop: 50 / s, width: (Math.min(leftWing, rightWing) - 24) / s, height: (viewportHeight >= 320 ? 44 : 28) / s, gap: 4 / s });
     Object.assign(arenaLayout.joystick, { x: 76 / s, y: (viewportHeight - 72) / s, radius: 64 / s });
     Object.assign(arenaLayout.bomb, { x: (viewportWidth - 76) / s, y: (viewportHeight - 72) / s, radius: 64 / s });
     rectangle(arenaLayout.menu, (viewportWidth - rightWing / 2) / s, (viewportHeight - 78) / s, 96 / s, 44 / s);
@@ -84,7 +84,7 @@ export function updateArenaLayout(viewportWidth: number, viewportHeight: number,
     const shape = arenaLayout[control], radius = shape.radius * s;
     const sideWidth = control === 'joystick' ? arenaLayout.board.x * s : viewportWidth - (arenaLayout.board.x + arenaLayout.board.width) * s;
     const cardTop = control === 'joystick' ? cards.top : cards.rightTop;
-    const top = Math.min((cardTop + cards.height * 2 + cards.gap) * s + 4, viewportHeight - radius * 2);
+    const top = Math.min((cardTop + cards.height * 2 + cards.gap) * s + 1, viewportHeight - radius * 2);
     const defaultSide = (control === 'joystick' ? shape.x : width - shape.x) * s - radius;
     const defaultBottom = viewportHeight - shape.y * s - radius;
     controlGeometry.defaults[side] = Math.round(defaultSide); controlGeometry.defaults[bottom] = Math.round(defaultBottom);

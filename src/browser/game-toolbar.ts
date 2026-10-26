@@ -3,7 +3,7 @@ import { readFeedbackSettings, setVolume, setParticleBudget } from './feedback-s
 import type { GameFlowState } from '../game-flow/index.js';
 import { icon, type Icon } from './ui-icons.js';
 import { arenaLayout, controlGeometry } from './layout.js';
-import { controlRevision, readControlPreferences, resetControlPreferences, updateControlPreferences, type MarginName } from './control-preferences.js';
+import { controlMarginLimit, controlRevision, readControlPreferences, resetControlPreferences, updateControlPreferences, type MarginName } from './control-preferences.js';
 
 type Commands = { pause(): void; resume(): void; fullscreen(): void; switchView(): void; menu(): void; focusCanvas(): void; controlsChanged(): void };
 const margins: readonly [MarginName, string][] = [['joystickLeft', '摇杆距左'], ['joystickBottom', '摇杆距底'], ['bombRight', '放弹距右'], ['bombBottom', '放弹距底']];
@@ -30,7 +30,7 @@ export class GameToolbar {
     this.dialog.innerHTML = `<header><h2 id="settings-title">${icon('settings')}设置</h2><button type="button" class="icon-button settings-close" aria-label="关闭设置">${icon('close')}</button></header>
       <div class="settings-body"><nav class="settings-tabs" role="tablist" aria-label="设置分类">${([['controls','gamepad','操作'],['audio','volume','音量'],['effects','sparkles','特效']] as const).map(([id,glyph,label]) => `<button type="button" role="tab" id="tab-${id}" aria-controls="panel-${id}" aria-selected="${id === 'controls'}" data-tab="${id}">${icon(glyph)}${label}</button>`).join('')}</nav>
       <section id="panel-controls" role="tabpanel" aria-labelledby="tab-controls" class="control-panel"><div class="control-fields"><fieldset class="joystick-modes"><legend>摇杆模式</legend><label><input type="radio" name="joystick-mode" value="fixed"><span>固定摇杆</span></label><label><input type="radio" name="joystick-mode" value="floating"><span>浮动摇杆</span></label></fieldset>
-        <div class="margin-fields">${margins.map(([name,label]) => `<label class="margin-row" data-margin="${name}"><span>${label}</span><input type="range" min="0" max="240" step="1" aria-label="${label}"><output></output></label>`).join('')}</div><p class="control-explanation"></p></div>
+        <div class="margin-fields">${margins.map(([name,label]) => `<label class="margin-row" data-margin="${name}"><span>${label}</span><input type="range" min="0" max="${controlMarginLimit}" step="1" aria-label="${label}"><output></output></label>`).join('')}</div><p class="control-explanation"></p></div>
       <section class="position-preview" aria-label="整个横屏安全区的位置预览"><h3>位置预览</h3><div class="preview-viewport"><div class="preview-map"></div><div class="preview-control preview-joystick">${icon('gamepad')}</div><div class="preview-control preview-bomb">${icon('bomb')}</div><span class="preview-edge preview-left"></span><span class="preview-edge preview-right"></span><span class="preview-edge preview-bottom-left"></span><span class="preview-edge preview-bottom-right"></span></div><p>控件外缘到屏幕安全区边缘</p></section></section>
       <section id="panel-audio" role="tabpanel" aria-labelledby="tab-audio" class="feedback-panel" hidden><h3>游戏音量</h3><p>调整放弹、爆炸与拾取声音</p><label class="volume-row"><input type="range" min="0" max="100" step="1" aria-label="游戏音量"><output></output></label></section>
       <section id="panel-effects" role="tabpanel" aria-labelledby="tab-effects" class="feedback-panel" hidden><h3>粒子效果</h3><p>减少粒子不改变火焰与危险范围</p><div class="particle-options">${[[96,'丰富'],[32,'精简'],[0,'关闭']].map(([value,label]) => `<button type="button" class="secondary-button" data-particles="${value}">${label}</button>`).join('')}</div><p class="motion-note"></p></section></div>
@@ -82,7 +82,7 @@ export class GameToolbar {
     for (const [name] of margins) {
       const row = this.dialog.querySelector<HTMLElement>(`[data-margin="${name}"]`)!, input = row.querySelector('input')!;
       const desired = p[name] ?? controlGeometry.defaults[name], actual = controlGeometry.actual[name];
-      input.max = String(controlGeometry.maximum[name]); input.value = String(Math.min(desired, controlGeometry.maximum[name]));
+      input.max = String(Math.min(controlMarginLimit, controlGeometry.maximum[name])); input.value = String(Math.min(desired, Number(input.max)));
       input.disabled = floating && name.startsWith('joystick'); row.classList.toggle('disabled', input.disabled);
       row.querySelector('output')!.textContent = `${desired} px`; input.setAttribute('aria-valuetext', `${desired}像素${desired !== actual ? `，本屏实际${actual}像素` : ''}`);
       if (!input.disabled && Math.abs(desired - actual) > 1) constrained = true;

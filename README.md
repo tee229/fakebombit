@@ -1,6 +1,6 @@
 # Fake Bomb It
 
-原15项首版实施进度 **13/15**；当前为 #16 手机浏览器体验与性能验收，#17 微信小游戏适配等待浏览器验收通过。新增 [#19 UI、主题包明暗与触屏操作变更](https://github.com/tee229/fakebombit/issues/19)已选定图2的菜单和对局、图1的设置，明暗两版已整理为[统一参考图](.impeccable/mocks/issue-19/selected-composite.png)，下一步按此制作页面。完整已完成项与剩余清单见[实施进度](docs/implementation-status.md)。
+原15项首版实施进度 **13/15**；当前为 #16 手机浏览器体验与性能验收，#17 微信小游戏适配等待浏览器验收通过。新增 [#19 UI、主题包明暗与触屏操作变更](https://github.com/tee229/fakebombit/issues/19)已按图2的菜单/对局、图1的设置实现明暗界面、主题外观变体及固定/浮动操作，详见[本轮验证](docs/validation/issue-19-ui-implementation.md)；等待对应版本手机复验。完整已完成项与剩余清单见[实施进度](docs/implementation-status.md)。
 
 Issues #3–#11 implement headless movement, bombs, power-ups, normal AI battles and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
@@ -15,6 +15,8 @@ Open <http://127.0.0.1:5173/?arena=items> for the power-up practice arena. Move 
 Open <http://127.0.0.1:5173/?arena=escape> to watch one AI escape a repeatable chain. Bombs nominally due at ticks 180 and 195 both explode at 180; the AI moves out of their rays and survives the lasting fire. **R** repeats the same preparation and scene. The HUD shows observing, escaping, safe, unconfirmed-route or budget status, and the AI has a distinct ring and label. See [escape AI validation](docs/validation/issue-9-escape-ai.md).
 
 Open <http://127.0.0.1:5173/?arena=normal> for a controlled normal-AI escape-sealing exercise. Three normal AIs share a dead-end spawn; all use ordinary movement, abilities and bomb rules. After R, immediately place a bomb, move left and then down to leave its rays. Sealing their exit demonstrates a real victory through ordinary intents. This fixed diagnostic layout verifies the outcome flow and is not a random-map difficulty sample.
+
+菜单设置按钮或局内工具栏可打开设置。操作页独立调整摇杆距左/距底、放弹距右/距底，数值从控件外缘量到屏幕安全区边缘；浮动模式在左侧操作区按下定位，拖动后移动，松手隐藏，并保留固定位置。边距随当前视口约束而不覆盖偏好，恢复操作默认值不改音量、粒子或明暗。设置跨访问保存；局内打开会暂停，关闭后手动继续。明暗开关同时切换界面与当前主题包，两种外观开局前均准备，切换保留本局进度。
 
 The browser uses Vite **8.3.4** and Phaser **3.90.0**, verified against the npm registry and official documentation during implementation. Phaser 3 supplies Canvas/WebGL rendering and the documented scene/scale interfaces; the registry's current Phaser 4 release was also checked. `pnpm build` writes the production browser build to `dist/web`; `pnpm preview` serves it on <http://127.0.0.1:4173/>. Headless output remains in `dist/match` and `dist/demo`.
 
