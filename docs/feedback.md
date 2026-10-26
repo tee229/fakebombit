@@ -30,4 +30,4 @@ Browser playback diagnostics are attached to the audio element (`data-background
 
 ## Evidence
 
-See [validation](validation/issue-15-feedback.md). Desktop browser playback/decoding and canvas checks do not establish mobile speaker loudness, physical multitouch performance, or device-wide audio lifecycle coverage; these remain #16.
+See [effect validation](validation/issue-15-feedback.md) and [background music / independent volumes](validation/issue-20-audio.md). Desktop browser playback/decoding and canvas checks do not establish mobile speaker loudness, physical multitouch performance, or device-wide audio lifecycle coverage; these remain #16.
