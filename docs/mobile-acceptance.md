@@ -29,7 +29,9 @@
 
 双指断触诊断（#21）：在原地址保留已有参数并加上 `acceptance=1&touchTrace=1`。关闭表单，选择浮动摇杆并开局，复现后立即暂停、打开“验收报告”并下载 JSON。新增 `inputTrace` 只在此模式记录，最多保留最近200项指针、方向/中心变化、窗口大小、后台与焦点事件；移动事件最多每100ms一条。记录只在当前页面内存中，下载后手动提供，不自动上传。该模式不计作正式性能验收，普通 `acceptance=1` 不启用触控记录。
 
-`pnpm test:browser-touch` 启动独立无头 Chromium 和仅绑定127.0.0.1的临时开发服务器，验证固定/浮动摇杆与放弹的原生双触点、右手松开后角色继续移动，以及真实取消清理。首次可用 `pnpm exec playwright install chromium` 安装测试浏览器；也可设置环境变量 `PLAYWRIGHT_CHANNEL=chrome` 或 `msedge` 使用已安装的浏览器，仍创建独立测试配置，不访问个人标签页。该检查单独运行，不加入无需浏览器的 `pnpm check`。桌面触控模拟不能替代手机复现。
+`pnpm test:browser-touch` 启动独立无头 Chromium 和仅绑定127.0.0.1的临时开发服务器，验证固定/浮动摇杆与放弹的原生双触点、右手松开后角色继续移动，以及真实取消清理。首次可用 `pnpm exec playwright install chromium` 安装测试浏览器；也可设置环境变量 `PLAYWRIGHT_CHANNEL=chrome` 或 `msedge` 使用已安装的浏览器，仍创建独立测试配置，不访问个人标签页。设置 `PLAYWRIGHT_BROWSER=webkit` 则用独立WebKit和1180×820平板视口（需先 `pnpm exec playwright install webkit`）；该引擎的多触点通过已固定Playwright 1.62.1的原生协议入口发送，不用DOM伪造触控。全屏兼容与失败反馈另通过能力桩验证，不冒充系统全屏测试。该检查单独运行，不加入无需浏览器的 `pnpm check`。桌面触控模拟不能替代设备复验。
+
+2026-10-27补充：用户确认断触设备为iPad Air 8 / Safari，并报告不能全屏，系统版本待补。WebKit已复现并修复按钮层漏接松手后误清空摇杆的链路，详见[复现与修复记录](validation/issue-21-dual-touch.md)。在该iPad上复测双指及全屏；如全屏仍失败，点按后暂停下载报告，新增 `fullscreen` 保存标准/前缀能力、enabled状态和最近错误。表单可选Safari，请将型号/系统改为本次实际设备，不沿用OPPO/Android默认值。此新增目标不替代原#16的三款Android浏览器验收。
 
 `pnpm check` 运行规则、输入、流程、资源与统计回归，并构建生产版本。随后使用 `pnpm exec vite preview --host 0.0.0.0 --port 4173` 提供仅包含生产产物的局域网预览。不要把 Vite 开发服务器当作最终性能版本。停止该进程即可停止本次预览。
 

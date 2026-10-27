@@ -15,6 +15,7 @@ import { AcceptancePanel } from './acceptance-panel.js';
 import { GameToolbar } from './game-toolbar.js';
 import { appearance } from './appearance.js';
 import { BackgroundMusic } from './background-music.js';
+import { toggleFullscreen } from './fullscreen.js';
 import './style.css';
 
 // Single composition root. Phaser is a host for a business flow that also runs without the engine.
@@ -25,6 +26,7 @@ class GameScene extends Phaser.Scene {
   private toolbar: GameToolbar | undefined;
   private music: BackgroundMusic | undefined;
   private appearanceMode = '';
+  private fullscreenNoticeTimer: ReturnType<typeof setTimeout> | undefined;
   private arena: Arena = 'generated';
   private live: { id: number; view: MatchView; controls: CanvasControls; listenerCount: () => number; lastResult: string } | undefined;
   constructor() { super('game'); }
@@ -59,16 +61,17 @@ class GameScene extends Phaser.Scene {
     };
     const viewportObserver = new ResizeObserver(resize); viewportObserver.observe(document.getElementById('game')!);
     window.addEventListener('blur', background); window.addEventListener('pagehide', background);
-    window.addEventListener('resize', resize); document.addEventListener('fullscreenchange', resize); document.addEventListener('visibilitychange', visibility);
+    window.addEventListener('resize', resize); document.addEventListener('fullscreenchange', resize); document.addEventListener('webkitfullscreenchange', resize); document.addEventListener('visibilitychange', visibility);
     let disposed = false;
     const cleanup = () => {
       if (disposed) return; disposed = true;
+      clearTimeout(this.fullscreenNoticeTimer);
       this.flow?.dispose(); this.menu?.destroy(); this.flow = undefined; this.menu = undefined;
       this.acceptance?.dispose(); this.acceptance = undefined;
       this.toolbar?.destroy(); this.toolbar = undefined;
       this.music?.dispose(); this.music = undefined;
       window.removeEventListener('blur', background); window.removeEventListener('pagehide', background);
-      window.removeEventListener('resize', resize); document.removeEventListener('fullscreenchange', resize); document.removeEventListener('visibilitychange', visibility);
+      window.removeEventListener('resize', resize); document.removeEventListener('fullscreenchange', resize); document.removeEventListener('webkitfullscreenchange', resize); document.removeEventListener('visibilitychange', visibility);
       viewportObserver.disconnect();
       this.events.off(Phaser.Scenes.Events.SHUTDOWN, cleanup); this.events.off(Phaser.Scenes.Events.DESTROY, cleanup);
     };
@@ -136,11 +139,14 @@ class GameScene extends Phaser.Scene {
 
   private resume(): void { if (!this.toolbar?.isOpen() && document.visibilityState !== 'hidden' && document.hasFocus()) this.flow?.resume(); }
   private fullscreen(): void {
-    if (!document.documentElement.requestFullscreen || !document.exitFullscreen) {
-      this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'); return;
-    }
-    const action = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-    void action.catch(() => this.status('当前浏览器无法进入全屏，可收起地址栏后继续横屏游玩。'));
+    clearTimeout(this.fullscreenNoticeTimer);
+    void toggleFullscreen().then(result => {
+      const status = document.getElementById('fullscreen-status')!;
+      status.hidden = result === 'changed';
+      status.textContent = result === 'unsupported' ? '当前浏览器环境未开放全屏，可收起地址栏后横屏游玩。'
+        : result === 'failed' ? '未能进入全屏，请重试；也可保持横屏游玩。' : '';
+      if (result !== 'changed') this.fullscreenNoticeTimer = setTimeout(() => { status.hidden = true; }, 6000);
+    });
   }
   private status(message: string): void { const status = document.getElementById('game-status'); if (status) status.textContent = message; }
   update(): void {

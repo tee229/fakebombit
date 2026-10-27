@@ -3,6 +3,7 @@ import type { GameFlowState, GameRun } from '../game-flow/index.js';
 import { readFeedbackSettings } from './feedback-settings.js';
 import './acceptance.css';
 import { arenaLayout } from './layout.js';
+import { fullscreenState } from './fullscreen.js';
 
 const checks = [
   ['touch', '双指移动与放弹可同时操作'], ['turn', '转弯、拖出和触摸取消没有卡住或误操作'],
@@ -35,7 +36,7 @@ export class AcceptancePanel {
       <div class="acceptance-fields">
       <label>手机型号<input id="acceptance-device" value="OPPO Find X8" maxlength="100"></label>
       <label>系统版本<input id="acceptance-os" value="Android 17" maxlength="100"></label>
-      <label>本次浏览器<select id="acceptance-browser"><option>Edge</option><option>Chrome</option><option>DuckDuckGo</option><option>桌面预检（非真机）</option></select></label>
+      <label>本次浏览器<select id="acceptance-browser"><option>Edge</option><option>Chrome</option><option>DuckDuckGo</option><option>Safari</option><option>桌面预检（非真机）</option></select></label>
       <label>浏览器版本（报告另附UA）<input id="acceptance-version" maxlength="100" placeholder="可从浏览器关于页面填写"></label></div>
       <p>返回游戏后选外观并开始；对局中不显示统计遮挡地图。暂停或结果页可再次打开报告。重试保留本次记录，最多保留最近12局。</p>
       <div class="acceptance-actions"><button id="acceptance-close" type="button">返回游戏并记录</button><button id="acceptance-download" type="button">下载报告 JSON</button></div>
@@ -134,6 +135,7 @@ export class AcceptancePanel {
         version: this.value('#acceptance-version'), userAgent: navigator.userAgent, screen: [screen.width, screen.height],
         viewport: [innerWidth, innerHeight], pixelRatio: devicePixelRatio, maxTouchPoints: navigator.maxTouchPoints },
       presentationLayout: JSON.parse(this.canvas.dataset.viewportLayout ?? 'null'),
+      fullscreen: fullscreenState(),
       criteria: { continuousMs: 60000, segmentSelection: 'longest-continuous', minimumAverageFps: 55, maximumP95FrameMs: 33, maximumFrameMs: 200, p95ResolutionMs: .1 },
       manualChecks: Object.fromEntries(checks.map(([id]) => [id, this.root.querySelector<HTMLInputElement>(`input[name="${id}"]`)!.checked])),
       notes: this.value('#acceptance-notes'), errors: [...this.errors], resources,

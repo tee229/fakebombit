@@ -42,8 +42,9 @@ export class CanvasControls {
     document.getElementById('game')!.append(this.root, this.overlay);
     this.listeners = [['pointerdown', event => this.down(event)], ['pointermove', event => this.move(event)],
       ['pointerup', event => this.up(event)], ['pointercancel', event => this.cancel(event)], ['lostpointercapture', event => this.cancel(event)]];
-    for (const [name, listener] of this.listeners) this.canvas.addEventListener(name, listener);
-    this.joystick.addEventListener('pointerdown', this.listeners[0]![1]); this.bomb.addEventListener('pointerdown', this.listeners[0]![1]);
+    // WebKit can deliver move/up to the original button despite canvas capture.
+    // Both surfaces must finish the owning pointer before capture loss arrives.
+    for (const [name, listener] of this.listeners) { this.canvas.addEventListener(name, listener); this.root.addEventListener(name, listener); }
     this.bomb.addEventListener('keydown', event => {
       if (event.code !== 'Space' && event.code !== 'Enter') return;
       event.preventDefault(); event.stopPropagation(); if (!event.repeat && this.phase === 'playing') this.input.pointerDown(-1, 'bomb');
@@ -89,7 +90,7 @@ export class CanvasControls {
     for (const id of ids) if (this.canvas.hasPointerCapture(id)) this.canvas.releasePointerCapture(id);
   }
   destroy(): void {
-    for (const [name, listener] of this.listeners) this.canvas.removeEventListener(name, listener);
+    for (const [name, listener] of this.listeners) { this.canvas.removeEventListener(name, listener); this.root.removeEventListener(name, listener); }
     this.clear(); this.root.remove(); this.overlay.remove();
   }
   private position(event: PointerEvent): Position {

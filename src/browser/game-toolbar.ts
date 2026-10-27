@@ -2,6 +2,7 @@ import { appearance, toggleAppearance } from './appearance.js';
 import { readFeedbackSettings, setVolume, setMusicVolume, setParticleBudget } from './feedback-settings.js';
 import type { GameFlowState } from '../game-flow/index.js';
 import { icon, type Icon } from './ui-icons.js';
+import { fullscreenState } from './fullscreen.js';
 import { arenaLayout, controlGeometry } from './layout.js';
 import { controlMarginLimit, controlRevision, readControlPreferences, resetControlPreferences, updateControlPreferences, type MarginName } from './control-preferences.js';
 
@@ -121,10 +122,11 @@ export class GameToolbar {
       if (blocked || !['menu','paused','result'].includes(phase)) this.close();
       else { const key = `${arenaLayout.revision}:${controlRevision()}:${appearance().mode}`; if (key !== this.previewKey) { this.previewKey = key; this.refresh(); } }
     }
-    const key = `${phase}:${view}:${blocked}:${appearance().mode}:${Boolean(document.fullscreenElement)}`;
+    const full = fullscreenState().active;
+    const key = `${phase}:${view}:${blocked}:${appearance().mode}:${full}`;
     if (key === this.stateKey) return; this.stateKey = key;
     this.root.hidden = !['playing','paused','result'].includes(phase) || blocked;
-    const full = Boolean(document.fullscreenElement), light = appearance().mode === 'light', entities = view === 'entities';
+    const light = appearance().mode === 'light', entities = view === 'entities';
     const items: [Icon, string][] = [[this.playing ? 'pause' : 'play', this.playing ? '暂停游戏' : '继续游戏'],
       [full ? 'restore' : 'fullscreen', full ? '退出全屏' : '进入全屏'], ['settings', '打开设置'],
       [light ? 'sun' : 'moon', light ? '切换为暗色主题' : '切换为亮色主题'], ['layers', entities ? '切换为正常画面' : '切换为实体层']];
