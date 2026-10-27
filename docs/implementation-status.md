@@ -1,6 +1,6 @@
 # 首版进度与待办
 
-核对日期：2026-10-26（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **13/15**，#16 进行中，#17 等待前置验收；新增变更 #19 已实现界面和操作功能，待新版本手机复验。#1 是总规格、#2 是架构规格，不计入原15个实施任务。
+核对日期：2026-10-27（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **13/15**，#16 进行中，#17 等待前置验收；新增变更 #19 已实现界面和操作功能，待新版本手机复验。#1 是总规格、#2 是架构规格，不计入原15个实施任务。
 
 | 任务 | 状态 | 已交付内容 |
 | --- | --- | --- |
@@ -11,6 +11,7 @@
 | #18 | 完成，附加修复 | 移除人物名称遮挡、两侧实时状态卡；不增加实施任务计数 |
 | [#19](https://github.com/tee229/fakebombit/issues/19) | 界面与功能已实现，待手机复验 | 图2菜单/对局、图1设置，主题明暗、四项边距、固定/浮动、保存迁移；310项回归通过 |
 | [#20](https://github.com/tee229/fakebombit/issues/20) | 背景音乐与独立音量已实现，待手机复验 | 用户MP3、单实例循环、暂停续播、音乐/音效独立保存；[浏览器验证与回归](validation/issue-20-audio.md) |
+| [#21](https://github.com/tee229/fakebombit/issues/21) | WebKit断触链路已复现修复，待iPad复验 | 用户补充iPad Air 8 / Safari；按钮事件接收修复、原生平板双指回归、全屏兼容与失败诊断；[证据与限制](validation/issue-21-dual-touch.md) |
 | [#16](https://github.com/tee229/fakebombit/issues/16) | 进行中 | 三浏览器旧版报告已收齐；用户确认新版布局与工具栏复测通过，新版报告及首局长帧结论待补 |
 | [#17](https://github.com/tee229/fakebombit/issues/17) | 等待 #16 | 微信小游戏适配与真机验证；浏览器版通过后再开始 |
 

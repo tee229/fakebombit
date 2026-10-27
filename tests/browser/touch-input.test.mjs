@@ -113,7 +113,7 @@ test('fullscreen button supports a prefixed browser API returning void', async (
   } finally { await context.close(); }
 });
 
-for (const failure of ['unsupported', 'rejected']) {
+for (const failure of ['unsupported', 'rejected', 'event-rejected']) {
   test(`fullscreen ${failure}: visible feedback and diagnostic capabilities`, async () => {
     const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
     try {
@@ -121,8 +121,10 @@ for (const failure of ['unsupported', 'rejected']) {
         for (const method of ['requestFullscreen', 'webkitRequestFullscreen']) Object.defineProperty(HTMLElement.prototype, method, { configurable: true, writable: true, value: undefined });
         Object.defineProperty(Document.prototype, 'exitFullscreen', { configurable: true, value: undefined });
         Object.defineProperty(document, 'webkitExitFullscreen', { configurable: true, writable: true, value: undefined });
-        if (failure === 'rejected') {
-          HTMLElement.prototype.webkitRequestFullscreen = () => { throw new DOMException('Denied by test policy', 'NotAllowedError'); };
+        if (failure !== 'unsupported') {
+          HTMLElement.prototype.webkitRequestFullscreen = failure === 'rejected'
+            ? () => { throw new DOMException('Denied by test policy', 'NotAllowedError'); }
+            : () => { setTimeout(() => document.dispatchEvent(new Event('webkitfullscreenerror')), 0); };
           document.webkitExitFullscreen = () => {};
         }
       }, failure);
@@ -138,10 +140,10 @@ for (const failure of ['unsupported', 'rejected']) {
       await page.getByRole('button', { name: '验收报告', exact: true }).click();
       await page.getByText('查看当前原始报告', { exact: true }).click();
       const report = JSON.parse(await page.getByRole('textbox', { name: '当前验收报告JSON' }).inputValue());
-      assert.equal(report.fullscreen.prefixed, failure === 'rejected');
+      assert.equal(report.fullscreen.prefixed, failure !== 'unsupported');
       assert.equal(report.fullscreen.standard, false);
       assert.equal(report.fullscreen.active, false);
-      if (failure === 'rejected') assert.match(report.fullscreen.lastError, /NotAllowedError/);
+      if (failure !== 'unsupported') assert.match(report.fullscreen.lastError, failure === 'rejected' ? /NotAllowedError/ : /fullscreenerror/);
       else assert.equal(report.fullscreen.lastError, null);
     } finally { await context.close(); }
   });
