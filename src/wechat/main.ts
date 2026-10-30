@@ -4,6 +4,7 @@ import { builtinThemes } from '../resources/builtin-themes.js';
 import { builtinSkins } from '../resources/builtin-skins.js';
 import { withSkin } from '../resources/index.js';
 import { createPerformanceRecord } from '../diagnostics/performance-record.js';
+import type { FeedbackEffect } from '../presentation/feedback.js';
 import { Images } from './assets.js';
 import { NativeAudio } from './audio.js';
 import { MatchBoard } from './board.js';
@@ -136,18 +137,20 @@ class WechatGame {
     this.context.setTransform(this.viewport.pixelRatio, 0, 0, this.viewport.pixelRatio, 0, 0);
     this.ui.drawBackground(this.context, this.viewport, settings.appearance, !state.run);
     let particles = 0;
+    let effects: readonly FeedbackEffect[] = [];
     if (this.live && state.run) {
       const paused = state.phase === 'paused';
-      const feedback = this.live.board.present(state.run.frame, delta, paused, this.entities, settings);
+      const feedback = this.live.board.present(state.run.frame, Math.min(100, delta), paused, this.entities, settings);
       if (paused || this.entities || this.lastVolume !== settings.volume) this.audio.stopEffects();
       this.lastVolume = settings.volume;
       this.audio.play(feedback.sounds);
       particles = feedback.effects.reduce((sum, effect) => sum + effect.particles, 0);
+      effects = feedback.effects;
       this.live.board.draw(this.context, state.run.frame, this.layout, settings, this.entities);
     }
     if (this.notice && this.clock() >= this.noticeUntil) this.notice = '';
     this.ui.render(this.context, { state, settings, layout: this.layout, viewport: this.viewport,
-      settingsOpen: this.settingsOpen, booting: this.booting, bootError: this.bootError, notice: this.notice, entities: this.entities,
+      settingsOpen: this.settingsOpen, booting: this.booting, bootError: this.bootError, notice: this.notice, entities: this.entities, effects,
       reportAvailable: this.measuring, touch: state.run?.input.readTouch() ?? { joystickActive: false, knob: { x: 0, y: 0 }, bombHeld: false }, floatingCenter: this.floatingCenter,
     });
     this.audio.sync(this.visible && !this.audioInterrupted && !this.awaitingInteraction && state.phase !== 'paused' && (!this.settingsOpen || !state.run), settings.musicVolume);

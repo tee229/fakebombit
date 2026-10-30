@@ -13,15 +13,17 @@ async function launch(options = {}) {
   let now = 0, sequence = 0;
   const frames = new Map(), listeners = new Map(), storage = options.storage ?? new Map(), audio = [];
   const failedImages = new Set(options.failedImages ?? []), delayedImages = new Map();
-  const logs = [], copies = [];
+  const logs = [], copies = [], drawingCalls = [];
   let viewport = { windowWidth: 844, windowHeight: 390, screenWidth: 844, screenHeight: 390, pixelRatio: 2,
     safeArea: { left: 44, top: 0, right: 800, bottom: 370, width: 756, height: 370 }, ...options.viewport };
-  const drawing = new Proxy({}, { get: (_target, name) => name === 'measureText' ? text => ({ width: text.length * 8 }) : () => {}, set: () => true });
+  const drawing = new Proxy({}, { get: (_target, name) => name === 'measureText' ? text => ({ width: text.length * 8 })
+    : (...args) => { if (options.captureDrawing && (name === 'fillText' || name === 'drawImage')) drawingCalls.push({ method: name, path: args[0]?.path, args: name === 'drawImage' ? args.slice(1) : args }); }, set: () => true });
   const wx = {
     createCanvas: () => ({ width: 0, height: 0, getContext: () => drawing }),
     createImage() {
       const image = { width: 0, height: 0, onload: () => {}, onerror: () => {} };
       Object.defineProperty(image, 'src', { set(path) {
+        image.path = path;
         const load = () => {
           if (failedImages.has(path)) { image.onerror(); return; }
           const buffer = readFileSync(join(root, path));
@@ -42,8 +44,8 @@ async function launch(options = {}) {
     getLaunchOptionsSync: () => ({ query: { acceptance: '1', seed: 'issue16-baseline-c', ...options.query } }),
     setPreferredFramesPerSecond: () => {},
     createInnerAudioContext() {
-      const events = new Map(), item = { playing: false, destroyed: false, currentTime: 0, volume: 0, src: '', loop: false,
-        play() { this.playing = true; events.get('Play')?.(); }, pause() { this.playing = false; events.get('Pause')?.(); },
+      const events = new Map(), item = { playing: false, destroyed: false, currentTime: 0, volume: 0, src: '', loop: false, playCalls: 0,
+        play() { this.playCalls++; if (options.failMusicOnce && this.src === 'audio/fbi-bgm.mp3' && this.playCalls === 1) { if (options.failMusicOnce === 'throw') throw Error('locked'); events.get('Error')?.(); return; } this.playing = true; events.get('Play')?.(); }, pause() { this.playing = false; events.get('Pause')?.(); },
         stop() { this.playing = false; this.currentTime = 0; events.get('Stop')?.(); }, destroy() { this.playing = false; this.destroyed = true; },
       };
       for (const event of ['Play', 'Pause', 'Stop', 'Error', 'Ended']) item[`on${event}`] = callback => events.set(event, callback);
@@ -60,6 +62,7 @@ async function launch(options = {}) {
   const read = () => plain(context.GameGlobal.fakebombit.read());
   const step = (count = 1, delta = 1000 / 60) => {
     for (let i = 0; i < count; i++) {
+      drawingCalls.length = 0;
       now += delta; for (const item of audio) if (item.playing) item.currentTime += delta / 1000;
       const batch = [...frames.values()]; frames.clear(); for (const callback of batch) callback(now);
     }
@@ -70,7 +73,7 @@ async function launch(options = {}) {
   const tap = async id => { const r = widget(id), x = r.x + r.width / 2, y = r.y + r.height / 2; touch('TouchStart', 99, x, y); step(); touch('TouchEnd', 99, x, y); await settle(); };
   const key = async code => { listeners.get('KeyDown')?.({ code, key: code, timeStamp: now }); listeners.get('KeyUp')?.({ code, key: code, timeStamp: now }); await settle(); };
   await settle();
-  return { read, step, settle, touch, tap, key, widget, storage, audio, logs, copies, failedImages, delayedImages,
+  return { read, step, settle, touch, tap, key, widget, storage, audio, logs, copies, drawingCalls, failedImages, delayedImages,
     event: (name, data = {}) => listeners.get(name)?.(data), resize: value => { viewport = value; listeners.get('WindowResize')?.({}); },
   };
 }
@@ -134,11 +137,15 @@ test('settings pause, two audio channels persist, reset preserves audio/appearan
 });
 
 test('a real bomb ends the game immediately, retry owns fresh effects and music stays a single instance', async () => {
-  const app = await launch(); await app.tap('start'); const l = app.read().layout;
+  const app = await launch({ captureDrawing: true }); await app.tap('start'); const l = app.read().layout;
   app.touch('TouchStart', 1, l.bomb.x, l.bomb.y); app.step(2); app.touch('TouchEnd', 1, l.bomb.x, l.bomb.y);
   for (let i = 0; i < 200 && app.read().phase === 'playing'; i++) app.step();
   assert.equal(app.read().phase, 'result'); assert.equal(app.read().world.result.outcome, 'lost'); const tick = app.read().tick;
-  app.step(20); assert.equal(app.read().tick, tick); assert.ok(app.read().widgets.find(w => w.id === 'retry-main'));
+  const bodyCount = () => app.drawingCalls.filter(call => call.path === 'skins/mint-atlas.png').length;
+  const alive = app.read().world.actors.filter(actor => actor.alive).length;
+  app.step(1, 1000); assert.ok(bodyCount() > alive, 'one foreground stall does not skip the elimination animation');
+  app.step(8, 100); assert.equal(bodyCount(), alive, 'eliminated body still disappears after bounded presentation time');
+  assert.equal(app.read().tick, tick); assert.ok(app.read().widgets.find(w => w.id === 'retry-main'));
   await app.tap('retry-main'); assert.equal(app.read().phase, 'playing'); assert.equal(app.read().audio.musicInstances, 1);
   assert.ok(app.audio.filter(a => !a.destroyed).length <= 7);
 });
@@ -151,11 +158,35 @@ test('required image failures recover and cancelling preparation prevents an old
   await slow.tap('prepare-cancel'); slow.delayedImages.get(path)?.(); await slow.settle(); assert.equal(slow.read().phase, 'menu'); assert.equal(slow.read().runId, null);
 });
 
-test('native audio interruption waits for a new user action, including while in the menu', async () => {
+test('native audio interruptions and play failures wait for a new user action to retry', async () => {
   const app = await launch(); await app.tap('skin-coral'); assert.equal(app.read().audio.musicPlaying, true);
   app.event('AudioInterruptionBegin'); app.step(5); assert.equal(app.read().audio.musicPlaying, false);
   app.event('AudioInterruptionEnd'); app.step(5); assert.equal(app.read().audio.musicPlaying, false);
   await app.tap('skin-mint'); assert.equal(app.read().audio.musicPlaying, true);
+  for (const failMusicOnce of ['error', 'throw']) {
+    const failed = await launch({ failMusicOnce }); await failed.tap('skin-coral');
+    assert.equal(failed.read().audio.musicPlaying, false); failed.step(20); assert.equal(failed.audio[0].playCalls, 1);
+    await failed.tap('skin-mint'); assert.equal(failed.read().audio.musicPlaying, true); assert.equal(failed.audio[0].playCalls, 2);
+    assert.equal(failed.read().audio.musicInstances, 1);
+  }
+});
+
+test('reduced motion freezes the visible actor pose and pickup gains are drawn in actor side cards', async () => {
+  const app = await launch({ captureDrawing: true }); await app.tap('start');
+  const body = () => app.drawingCalls.find(call => call.path === 'skins/mint-atlas.png');
+  const frames = new Set();
+  for (let i = 0; i < 16; i++) { app.step(1, 66); frames.add(body().args[0]); }
+  assert.ok(frames.size > 1, 'ordinary idle pose animates');
+  await app.tap('settings'); await app.tap('tab-effects'); await app.tap('reduced-motion'); await app.tap('close-settings'); await app.tap('resume');
+  for (let i = 0; i < 16; i++) { app.step(1, 66); assert.equal(body().args[0], 0); assert.equal(body().args[1], 0); }
+  let gain;
+  for (let i = 0; i < 3000 && app.read().phase === 'playing'; i++) {
+    app.step(); gain = app.drawingCalls.find(call => call.method === 'fillText' && /^(玩家|AI \d) · (容量|距离|速度) ↑/.test(call.args[0]));
+    if (gain) break;
+  }
+  assert.ok(gain, 'a real seeded AI pickup displays its gain in an actor side card');
+  const l = app.read().layout;
+  assert.ok(gain.args[1] < l.board.x || gain.args[1] > l.board.x + l.board.width, 'gain text belongs to a side rail');
 });
 
 test('phone and tablet layouts keep both right cards below the capsule-aware toolbar and thumb controls below cards', async () => {

@@ -67,7 +67,8 @@ export class MatchBoard {
         const actor = world.actors.find(a => a.id === pose.id)!;
         const p = interpolatePosition(actor, world.result || !actor.alive ? 1 : frame.alpha);
         if (actor.alive) { ctx.strokeStyle = actorColors[world.actors.indexOf(actor)]!; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(p.x * cell, (p.y + .28) * cell, cell * .35, cell * .13, 0, 0, Math.PI * 2); ctx.stroke(); }
-        this.sprite(ctx, pose.visual, p.x * cell, p.y * cell, cell, pose.visual.flipX);
+        const visual = settings.reducedMotion ? { ...pose.visual, frame: pose.visual.frames[0]! } : pose.visual;
+        this.sprite(ctx, visual, p.x * cell, p.y * cell, cell, visual.flipX);
       }
       this.drawEffects(ctx, cell, settings);
     } else {
@@ -106,7 +107,6 @@ export class MatchBoard {
         ctx.fillStyle = ['#d6b7de', '#e4cf9e', '#bbd7d5'][i % 3]!;
         ctx.fillRect(x + Math.cos(angle) * r - 1, y + Math.sin(angle) * r - 1 + p * p * cell * .15, 2, 2);
       }
-      if (effect.label) { ctx.globalAlpha = 1 - p; ctx.fillStyle = '#eaf8e9'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(effect.label, x, y - cell * (.6 + p)); }
       ctx.restore();
     }
   }

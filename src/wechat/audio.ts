@@ -20,7 +20,7 @@ export class NativeAudio {
       this.music = audio;
     } catch { this.failures++; }
   }
-  unlock(): void { this.unlocked = true; }
+  unlock(): void { this.unlocked = true; if (!this.musicPlaying) this.desired = false; }
   sync(active: boolean, volume: number): void {
     const desired = this.unlocked && active && volume > 0;
     try {

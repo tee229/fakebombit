@@ -13,7 +13,7 @@
 | [#20](https://github.com/tee229/fakebombit/issues/20) | 完成 | 用户确认独立静音、保存、后台续播、跨局不叠加和循环听感通过；[验收记录](validation/issue-20-audio.md) |
 | [#21](https://github.com/tee229/fakebombit/issues/21) | 用户确认iPad修复通过 | 2026-10-28用户确认“iPad已经修复”；接受为本项实机修复确认，系统版本未补充，不扩大为Android性能通过；[证据与限制](validation/issue-21-dual-touch.md) |
 | [#16](https://github.com/tee229/fakebombit/issues/16) | 用户接受已知限制后关闭 | Edge/DuckDuckGo合格样本与Chrome失败测量均保留；进入微信阶段的阻塞由用户解除；[报告核对](validation/issue-16-reports-2026-10-28.md) |
-| [#17](https://github.com/tee229/fakebombit/issues/17) | 完整移植已实现，待真机验收 | 独立构建、原生画布/触控/资源/音频/生命周期、完整双主题双皮肤流程与设置；10项小游戏集成测试及实际开发者工具流程通过；[实现与证据](validation/issue-17-wechat-port.md) |
+| [#17](https://github.com/tee229/fakebombit/issues/17) | 完整移植已实现，待真机验收 | 独立构建、原生画布/触控/资源/音频/生命周期、完整双主题双皮肤流程与设置；11项小游戏集成测试及实际开发者工具流程通过；[实现与证据](validation/issue-17-wechat-port.md) |
 
 ## 2026-10-30 阶段决定
 
@@ -45,4 +45,4 @@
 
 ## 当前任务：#17 微信小游戏适配与真机验证
 
-#16已按用户接受限制的决定关闭，原浏览器阶段基线以`61a61d3`先提交推送。正式小游戏工程已接入原有规则与资源契约，使用原生Canvas2D呈现、wx多触点/音频/存储/生命周期；完整包约3.27MiB，`pnpm build:wechat`生成`dist/wechat`，工具导入仓库根目录。310项原有测试、架构检查、10项小游戏集成测试，以及实际开发者工具中的菜单/主题/皮肤、摇杆、放弹判负、原种子重试、暂停和设置已验证。真实设备触控、完整对局、音频及性能仍待用户验收，不能以模拟器结果关闭#17。步骤见[微信开发说明](wechat-development.md)，证据与限制见[完整移植验证](validation/issue-17-wechat-port.md)，历史环境检查见[开发环境核对](validation/issue-17-environment-2026-10-30.md)。
+#16已按用户接受限制的决定关闭，原浏览器阶段基线以`61a61d3`先提交推送。正式小游戏工程已接入原有规则与资源契约，使用原生Canvas2D呈现、wx多触点/音频/存储/生命周期；完整包约3.28MiB，`pnpm build:wechat`生成`dist/wechat`，工具导入仓库根目录。310项原有测试、架构检查、11项小游戏集成测试，以及实际开发者工具中的菜单/主题/皮肤、摇杆、放弹判负、原种子重试、暂停和设置已验证。真实设备触控、完整对局、音频及性能仍待用户验收，不能以模拟器结果关闭#17。步骤见[微信开发说明](wechat-development.md)，证据与限制见[完整移植验证](validation/issue-17-wechat-port.md)，历史环境检查见[开发环境核对](validation/issue-17-environment-2026-10-30.md)。

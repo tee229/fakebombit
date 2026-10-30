@@ -1,4 +1,5 @@
 import type { GameFlowState } from '../game-flow/index.js';
+import type { FeedbackEffect } from '../presentation/feedback.js';
 import { builtinThemes } from '../resources/builtin-themes.js';
 import { builtinSkins } from '../resources/builtin-skins.js';
 import type { Settings, Margin } from './preferences.js';
@@ -22,6 +23,7 @@ export interface Model {
   state: GameFlowState<WechatMinigame.Image>; settings: Readonly<Settings>; layout: Layout; viewport: Viewport;
   settingsOpen: boolean; booting: boolean; bootError: string; notice: string; entities: boolean; reportAvailable: boolean;
   touch: { joystickActive: boolean; knob: { x: number; y: number }; bombHeld: boolean }; floatingCenter: Circle | null;
+  effects: readonly FeedbackEffect[];
 }
 export class NativeUI {
   widgets: Widget[] = [];
@@ -131,7 +133,9 @@ export class NativeUI {
       this.panel(rect, c.surface, actorColors[index]!, 12);
       this.image(`skins/${m.state.selection.skin?.id ?? 'mint'}-preview.png`, { x: rect.x + 5, y: rect.y + 5, width: Math.max(14, rect.height - 10), height: Math.max(14, rect.height - 10) });
       const labelX = rect.x + Math.max(24, rect.height);
-      this.text(`${actorName(world, actor)}${actor.alive ? '' : ' · 淘汰'}`, labelX, rect.y + rect.height * .28, 13, c.ink, 'left', true, rect.width - (labelX - rect.x) - 6);
+      const gain = m.effects.findLast(effect => effect.kind === 'pickup' && effect.actorId === actor.id)?.label;
+      const status = actor.alive ? gain : '淘汰';
+      this.text(`${actorName(world, actor)}${status ? ` · ${status}` : ''}`, labelX, rect.y + rect.height * .28, 13, c.ink, 'left', true, rect.width - (labelX - rect.x) - 6);
       const bombs = world.bombs.filter(b => b.ownerId === actor.id).length;
       this.text(`弹 ${bombs}/${actor.abilities.bombCapacity}  距 ${actor.abilities.blastRange}  速 ${Number(actor.abilities.speed.toFixed(1))}`, labelX, rect.y + rect.height * .72, 11, c.muted, 'left', false, rect.width - (labelX - rect.x) - 6);
       this.context.restore();
