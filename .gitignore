@@ -1,6 +1,7 @@
 # Local secrets and configuration
 .env
 .env.*
+project.private.config.json
 !.env.example
 !.env.sample
 *.pem

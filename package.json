@@ -11,11 +11,14 @@
     "typecheck": "tsc --noEmit",
     "typecheck:core": "tsc -p tsconfig.core.json --noEmit",
     "typecheck:browser": "tsc -p tsconfig.browser.json --noEmit",
+    "typecheck:wechat": "tsc -p tsconfig.wechat.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:browser-touch": "node --test tests/browser/touch-input.test.mjs",
     "build:core": "tsc -p tsconfig.build.json",
     "build": "pnpm build:core && vite build",
+    "build:wechat": "tsx scripts/build-wechat.ts",
+    "test:wechat": "node --test tests/wechat/*.test.mjs",
     "dev": "vite --host 127.0.0.1",
     "preview": "vite preview --host 127.0.0.1",
     "demo": "tsx src/demo/movement.ts",
@@ -28,10 +31,12 @@
     "art:feedback": "tsx scripts/build-feedback-audio.ts",
     "benchmark:match": "tsx scripts/benchmark-match.ts",
     "check:architecture": "tsx scripts/check-architecture.ts",
-    "check": "pnpm typecheck && pnpm typecheck:core && pnpm typecheck:browser && pnpm test && pnpm check:architecture && pnpm build"
+    "check": "pnpm typecheck && pnpm typecheck:core && pnpm typecheck:browser && pnpm typecheck:wechat && pnpm test && pnpm check:architecture && pnpm build && pnpm build:wechat && pnpm test:wechat"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^24.0.0",
+    "minigame-api-typings": "^3.8.21",
     "playwright": "1.62.1",
     "tsx": "4.23.15",
     "typescript": "6.0.3",

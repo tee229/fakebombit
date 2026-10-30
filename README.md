@@ -1,6 +1,6 @@
 # Fake Bomb It
 
-原15项首版实施进度 **14/15**；2026-10-30用户接受Chrome性能已知限制并关闭#16/#19，当前进入#17微信小游戏适配的开发环境核对。明暗界面、触屏操作、背景音乐及iPad修复已获用户功能验收，原性能失败报告保留。当前工具与待补条件见[微信开发环境核对](docs/validation/issue-17-environment-2026-10-30.md)，完整清单见[实施进度](docs/implementation-status.md)。
+原15项首版实施进度 **14/15**；2026-10-30用户接受Chrome性能已知限制并关闭#16/#19。#17微信小游戏完整移植已实现并在开发者工具运行，等待小游戏真机验收。浏览器明暗界面、触屏操作、背景音乐及iPad修复已获用户功能验收，原性能失败报告保留。小游戏构建和验收见[微信开发说明](docs/wechat-development.md)与[移植验证](docs/validation/issue-17-wechat-port.md)，完整清单见[实施进度](docs/implementation-status.md)。
 
 Issues #3–#11 implement headless movement, bombs, power-ups, normal AI battles and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 
@@ -37,7 +37,11 @@ node dist/demo/items.js
 node dist/demo/escape.js
 ```
 
-`pnpm check` runs all three TypeScript checks, behavioral tests, the architecture guard, and both builds. The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required for those demos or rule tests.
+`pnpm check` runs all four TypeScript checks, behavioral tests, the architecture guard, browser/core/WeChat builds and native-host integration tests. WeChat asset conversion also requires FFmpeg on PATH (or `FFMPEG_PATH`). The core typecheck uses only ES2023, with no DOM or Node types. The movement demo takes a complete corner path, passes through another actor, recreates every tick from the initialization record, and demonstrates all three creation-error categories. The bomb demo verifies win, loss, draw, bomb leave permission, event order, reproduction, and terminal freeze. The chain demo verifies cycles, phase-start walls, next-tick cleared paths, seeded same-cell arbitration, capacity, and reproduction with reversed inputs. No rendering environment is required for those demos or rule tests.
+
+## WeChat Mini Game
+
+Run `pnpm build:wechat`, then import the repository root into WeChat Developer Tools. `project.config.json` selects the official Fake Bomb It AppID and generated `dist/wechat/` game entry. The native Canvas2D adapter reuses the same match, flow, input and resource contracts; browser gameplay stays on Phaser. Themes, skins, settings, audio and pause/retry/menu flow are included. See [build and device acceptance instructions](docs/wechat-development.md); simulator checks do not establish real-device acceptance.
 
 ## Public match contract
 

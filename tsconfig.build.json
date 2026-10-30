@@ -8,5 +8,5 @@
     "sourceMap": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/browser/**/*.ts"]
+  "exclude": ["src/browser/**/*.ts", "src/wechat/**/*.ts"]
 }

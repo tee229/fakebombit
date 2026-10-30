@@ -1,6 +1,6 @@
 # 首版进度与待办
 
-核对日期：2026-10-30（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **14/15**。用户明确接受Chrome性能已知限制、关闭浏览器阶段问题，#16/#19已关闭，#20/#21已完成；#17开始微信小游戏开发环境核对。原始性能报告保留失败值，不宣称Chrome性能已修复。#1是总规格、#2是架构规格，不计入原15个实施任务。
+核对日期：2026-10-30（Asia/Shanghai）。任务状态来源为 [GitHub 任务图 #1](https://github.com/tee229/fakebombit/issues/1) 及其子任务；代码位于当前分支 `codex/first-release`。原15项首版实施任务已完成 **14/15**。用户明确接受Chrome性能已知限制、关闭浏览器阶段问题，#16/#19已关闭，#20/#21已完成；#17完整小游戏移植已实现，等待真机验收。原始性能报告保留失败值，不宣称Chrome性能已修复。#1是总规格、#2是架构规格，不计入原15个实施任务。
 
 | 任务 | 状态 | 已交付内容 |
 | --- | --- | --- |
@@ -13,7 +13,7 @@
 | [#20](https://github.com/tee229/fakebombit/issues/20) | 完成 | 用户确认独立静音、保存、后台续播、跨局不叠加和循环听感通过；[验收记录](validation/issue-20-audio.md) |
 | [#21](https://github.com/tee229/fakebombit/issues/21) | 用户确认iPad修复通过 | 2026-10-28用户确认“iPad已经修复”；接受为本项实机修复确认，系统版本未补充，不扩大为Android性能通过；[证据与限制](validation/issue-21-dual-touch.md) |
 | [#16](https://github.com/tee229/fakebombit/issues/16) | 用户接受已知限制后关闭 | Edge/DuckDuckGo合格样本与Chrome失败测量均保留；进入微信阶段的阻塞由用户解除；[报告核对](validation/issue-16-reports-2026-10-28.md) |
-| [#17](https://github.com/tee229/fakebombit/issues/17) | 开发环境就绪，正式适配待实施 | Stable 2.02.2609240、Node/pnpm、51395端口、登录、正式Fake Bomb It AppID及基础库3.17.6最小探针运行均通过；[环境记录](validation/issue-17-environment-2026-10-30.md) |
+| [#17](https://github.com/tee229/fakebombit/issues/17) | 完整移植已实现，待真机验收 | 独立构建、原生画布/触控/资源/音频/生命周期、完整双主题双皮肤流程与设置；10项小游戏集成测试及实际开发者工具流程通过；[实现与证据](validation/issue-17-wechat-port.md) |
 
 ## 2026-10-30 阶段决定
 
@@ -45,4 +45,4 @@
 
 ## 当前任务：#17 微信小游戏适配与真机验证
 
-#16已按用户接受限制的决定关闭。开发工具、登录、正式小游戏AppID和独立最小探针均已核实，开始正式适配的开发环境已就绪。接下来建立正式小游戏构建入口，接入同一对局和资源契约，验证画布、触控、资源、动画、音频与前后台生命周期，最后完成真机对局与回归。正式工程仍只有浏览器构建；`.scratch`下的探针用于环境检查，不能将`dist/web`直接当作小游戏工程。环境结论、截图与自动化systemInfo超时限制见[开发环境核对](validation/issue-17-environment-2026-10-30.md)。
+#16已按用户接受限制的决定关闭，原浏览器阶段基线以`61a61d3`先提交推送。正式小游戏工程已接入原有规则与资源契约，使用原生Canvas2D呈现、wx多触点/音频/存储/生命周期；完整包约3.27MiB，`pnpm build:wechat`生成`dist/wechat`，工具导入仓库根目录。310项原有测试、架构检查、10项小游戏集成测试，以及实际开发者工具中的菜单/主题/皮肤、摇杆、放弹判负、原种子重试、暂停和设置已验证。真实设备触控、完整对局、音频及性能仍待用户验收，不能以模拟器结果关闭#17。步骤见[微信开发说明](wechat-development.md)，证据与限制见[完整移植验证](validation/issue-17-wechat-port.md)，历史环境检查见[开发环境核对](validation/issue-17-environment-2026-10-30.md)。
