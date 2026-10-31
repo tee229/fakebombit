@@ -48,6 +48,6 @@ pnpm test:wechat
 
 设置底部固定提供验收入口；开启记录后，设置底部和暂停/结算面板右上角均可点“复制报告”，短横屏也可访问。手机端复制 JSON 后粘贴到聊天或另存为文件交回核对；小游戏[保存到磁盘接口仅支持PC](https://developers.weixin.qq.com/minigame/dev/api/file/wx.saveFileToDisk.html)，手机没有浏览器式下载按钮。报告不自动上传，最多保留最近12局，含实际初始化、设备及微信/基础库版本、设置、帧时/逻辑耗时、补步与丢弃时间、音频实例及错误；人工项目须另附结果。只读诊断入口为 `GameGlobal.fakebombit.read()`，不提供改写对局的方法。
 
-若复制提示后台隐私声明缺失，项目所有者需在微信公众平台本项目《用户隐私保护指引》中声明`wx.setClipboardData`对应的实际使用：按用户主动操作将本地验收报告写入剪贴板，以便复制反馈；程序不读取剪贴板、不自动上传。参见[官方小游戏隐私指南](https://developers.weixin.qq.com/minigame/dev/guide/open-ability/privacy)。保存声明后由手机用户处理平台隐私弹窗；程序使用微信默认弹窗，不自动代用户同意。`reportExport`只读诊断区分复制中、成功和失败，不能以按钮被点击视为导出完成。
+若复制提示后台隐私声明缺失，项目所有者需在微信公众平台本项目《用户隐私保护指引》中声明`wx.setClipboardData`对应的实际使用：按用户主动操作将本地验收报告写入剪贴板，以便复制反馈；程序不读取剪贴板、不自动上传。参见[官方小游戏隐私指南](https://developers.weixin.qq.com/minigame/dev/guide/open-ability/privacy)。保存声明后，首次需要授权的导出会显示自定义确认框，可查看平台托管的本项目隐私指引、选择“暂不导出”或“同意并复制”。只有用户主动点击同意才继续原剪贴板请求；拒绝会取消复制，对局保持暂停。`reportExport`只读诊断区分复制中、成功、取消和失败，不能以按钮被点击视为导出完成。
 
 当前自动化与实际开发者工具证据见 [#17 移植验证](validation/issue-17-wechat-port.md)，本轮真实手机反馈见[真机验收记录](validation/issue-17-device-acceptance-2026-10-31.md)。桌面工具与模拟 wx 宿主测试不能代替上述真机验收。

@@ -38,13 +38,25 @@ Windows的`.cmd`调用链还会拆分未在该层保留引号的`&`参数；本�
 
 小游戏类型检查、构建与12项生成包集成测试通过，覆盖短屏复制出含真实采样的JSON、无启动参数时手动开启采样，以及剪贴板失败不误报成功。实际开发者工具验证了设置固定入口、手动开启和暂停入口，截图见[设置底部](assets/issue-17-report-settings.jpg)及[暂停面板](assets/issue-17-report-pause.jpg)。手机端使用微信剪贴板导出；`wx.saveFileToDisk`仅支持PC，未添加在手机上无法工作的下载入口。已通过的人工功能验收保留，新候选包只需补充性能数据及复制报告的手机结果。
 
-### 当前平台阻拦
+### 平台阻拦的定位过程
 
 实际调用`wx.setClipboardData`返回`setClipboardData:fail please go to mp to announce your privacy usage`，导出状态为failed；不能将假宿主复制成功当作微信平台导出成功。根据[官方小游戏隐私指南](https://developers.weixin.qq.com/minigame/dev/guide/open-ability/privacy)，该提示对应MP后台尚未声明用户信息使用。已请求用户在本项目《用户隐私保护指引》中按实际用途补充剪贴板声明；代码不读取剪贴板、不自动上传报告。未改动用户的隐私设置，也未绕过平台校验。
 
 导出失败时显示可操作的中文提示，并在只读诊断中保留原始错误。后台声明保存、手机用户完成平台隐私弹窗后，需重新确认真实剪贴板导出及JSON内容。当前不能把报告入口修复等同为报告已成功收取。
 
 修复版官方预览再次打包成功，包体3,434,955字节，启动参数`acceptance=1`；生成`game.js`的SHA-256为`f0ab6fb7db709e578b974ff0ea510298284bcc7e667fabbb1fd3dc55e9d8c0f9`。此前人工功能通过的原候选包指纹保留，新二维码仅用于补采性能和确认导出。
+
+### 声明已保存及授权弹窗接入
+
+用户随后明确确认“已配置并保存”。再次真实调用时，微信错误已变为`please go to mp open official popup or use wx.onNeedPrivacyAuthorization to announce your privacy`，原声明缺失检查已通过，暴露出授权弹窗未接入的问题。
+
+已接入`wx.onNeedPrivacyAuthorization`，渲染本项目的确认界面，提供平台托管隐私指引链接、同意和拒绝。只在界面显示时发送exposureAuthorization；agree仅由用户按钮点击触发，键盘Enter不代替同意，拒绝后取消复制并保留暂停。没有自动同意或绕过校验。安装的API typings将此回调错误声明为对象，适配层以unknown和运行时函数检查接收官方文档规定的resolver，未修改共享规则。
+
+生成包同意/拒绝流程回归先红后绿；小游戏类型、构建及13项集成测试通过，验证未选择前不复制、可查看指引、同意后复制、拒绝后零复制，且无额外规则步进。真实手机同意及完整JSON仍待用户提供。
+
+真实微信回调已进入`privacyOpen: true`、`reportExport.state: copying`，错误列表为空，控件为查看指引/暂不导出/同意并复制，见[只读回调证据](assets/issue-17-privacy-callback.json)。工具未点击真实同意或拒绝按钮，因此此记录证明回调流程到达待选择状态，不证明已获得用户授权或复制成功。
+
+含授权确认流程的新候选包已实际预览打包成功：3,437,055字节，启动参数`acceptance=1`，生成`game.js`的SHA-256为`cae8ace70138f0fd2a58315255828e0d811332c20b7cdc05734ca3dbe853aa5d`。已向用户提供新的临时二维码，等待手机选择及报告。
 
 ## 完成条件
 

@@ -54,7 +54,10 @@ class WechatGame {
   private measuring: boolean;
   private notice = '';
   private noticeUntil = 0;
-  private reportExport: { state: 'idle' | 'copying' | 'copied' | 'failed'; error: string } = { state: 'idle', error: '' };
+  private reportExport: { state: 'idle' | 'copying' | 'copied' | 'failed' | 'cancelled'; error: string } = { state: 'idle', error: '' };
+  private privacyResolve: ((result: { event: 'exposureAuthorization' | 'agree' | 'disagree' }) => void) | null = null;
+  private privacyExposed = false;
+  private privacyError = '';
   private readonly records: { id: number; seed: string; initialization: GameRun<WechatMinigame.Image>['frame']['world']['initialization']; theme: string; skin: string; settings: Readonly<Settings>; metrics: Metrics }[] = [];
   constructor(private readonly host: WechatMinigame.Wx) {
     this.viewport = readViewport(host);
@@ -85,6 +88,8 @@ class WechatGame {
       entities: () => { this.entities = !this.entities; this.audio.stopEffects(); },
       updateSettings: (patch, controls) => this.update(patch, controls), resetControls: () => { this.preferences.resetControls(); this.relayout(); },
       report: () => this.report(), retryBoot: () => { void this.boot(); },
+      privacyAgree: () => this.resolvePrivacy(true), privacyDecline: () => this.resolvePrivacy(false),
+      privacyContract: () => this.host.openPrivacyContract({ fail: () => { this.privacyError = '打开指引失败，请稍后重试'; } }),
     });
     this.resize();
     host.onTouchStart(this.touchStart); host.onTouchMove(this.touchMove); host.onTouchEnd(this.touchEnd); host.onTouchCancel(this.touchCancel);
@@ -93,6 +98,13 @@ class WechatGame {
     host.onKeyDown(this.keyDown); host.onKeyUp(this.keyUp);
     host.onError(message => this.recordError(String(message)));
     host.onUnhandledRejection(event => this.recordError(String(event.reason)));
+    host.onNeedPrivacyAuthorization(resolve => {
+      // The installed typings describe an object; the documented runtime passes a resolver function.
+      const callback: unknown = resolve;
+      if (typeof callback !== 'function') { this.recordError('隐私授权回调格式异常'); return; }
+      this.pause(); this.privacyError = ''; this.privacyExposed = false;
+      this.privacyResolve = result => callback(result);
+    });
     try { host.setPreferredFramesPerSecond(60); } catch { /* The host may choose its own supported render rate. */ }
     GameGlobal.fakebombit = Object.freeze({ read: () => this.snapshot() });
     void this.boot(); this.schedule();
@@ -153,9 +165,11 @@ class WechatGame {
     if (this.notice && this.clock() >= this.noticeUntil) this.notice = '';
     this.ui.render(this.context, { state, settings, layout: this.layout, viewport: this.viewport,
       settingsOpen: this.settingsOpen, booting: this.booting, bootError: this.bootError, notice: this.notice, entities: this.entities, effects,
+      privacyOpen: this.privacyResolve !== null, privacyError: this.privacyError,
       reportAvailable: this.measuring, touch: state.run?.input.readTouch() ?? { joystickActive: false, knob: { x: 0, y: 0 }, bombHeld: false }, floatingCenter: this.floatingCenter,
     });
-    this.audio.sync(this.visible && !this.audioInterrupted && !this.awaitingInteraction && state.phase !== 'paused' && (!this.settingsOpen || !state.run), settings.musicVolume);
+    if (this.privacyResolve && !this.privacyExposed) { this.privacyExposed = true; this.privacyResolve({ event: 'exposureAuthorization' }); }
+    this.audio.sync(this.visible && !this.audioInterrupted && !this.awaitingInteraction && !this.privacyResolve && state.phase !== 'paused' && (!this.settingsOpen || !state.run), settings.musicVolume);
     if (this.measuring && state.run) {
       const record = this.records.find(record => record.id === state.run!.id);
       const world = state.run.frame.world, audio = this.audio.read();
@@ -252,6 +266,7 @@ class WechatGame {
   };
   private touchCancel = (): void => { this.clearInput(); };
   private keyDown = (event: WechatMinigame.OnKeyDownListenerResult): void => {
+    if (this.privacyResolve) return;
     if (!this.audioInterrupted) this.awaitingInteraction = false;
     this.audio.unlock(); const repeated = this.keys.has(event.code); this.keys.add(event.code);
     if (repeated) return;
@@ -275,6 +290,7 @@ class WechatGame {
   };
   private keyUp = (event: WechatMinigame.OnKeyDownListenerResult): void => { this.keys.delete(event.code); this.flow.read().run?.input.keyUp(event.code); };
   private report(): void {
+    if (this.privacyResolve) return;
     this.pause();
     if (!this.measuring) {
       this.measuring = true;
@@ -291,16 +307,22 @@ class WechatGame {
     this.host.setClipboardData({ data: JSON.stringify(report, null, 2), success: () => {
       this.reportExport = { state: 'copied', error: '' }; this.notice = '验收报告已复制，可粘贴发送'; this.noticeUntil = this.clock() + 3500;
     }, fail: error => {
-      const message = error.errMsg || '请重新操作'; this.reportExport = { state: 'failed', error: message };
-      this.notice = message.includes('privacy') ? '复制被微信阻止，请先完善后台隐私声明' : `复制失败：${message.slice(0, 80)}`;
+      const message = error.errMsg || '请重新操作', cancelled = message.includes('privacy permission is not authorized') || message.includes('cancel');
+      this.reportExport = { state: cancelled ? 'cancelled' : 'failed', error: message };
+      this.notice = cancelled ? '已取消复制，可稍后重新导出' : message.includes('privacy') ? '复制被微信阻止，请先完善后台隐私声明' : `复制失败：${message.slice(0, 80)}`;
       this.noticeUntil = this.clock() + 6500;
     } });
+  }
+  private resolvePrivacy(agree: boolean): void {
+    const resolve = this.privacyResolve; if (!resolve) return;
+    this.privacyResolve = null; this.privacyExposed = false;
+    resolve({ event: agree ? 'agree' : 'disagree' });
   }
   snapshot() {
     const state = this.flow.read(), world = state.run?.frame.world;
     return Object.freeze({ format: 'fakebombit-wechat-runtime-v1', phase: state.phase, runId: state.run?.id ?? null, theme: state.selection.id, skin: state.selection.skin?.id ?? null,
       tick: world?.tick ?? 0, seed: world?.initialization.seed ?? this.seed, world: world ?? null, settings: this.preferences.read(), settingsOpen: this.settingsOpen, visible: this.visible,
-      entities: this.entities, acceptance: this.measuring, reportExport: Object.freeze({ ...this.reportExport }), booting: this.booting, bootError: this.bootError, pauseReason: state.run?.frame.pauseReason ?? null,
+      entities: this.entities, acceptance: this.measuring, privacyOpen: this.privacyResolve !== null, reportExport: Object.freeze({ ...this.reportExport }), booting: this.booting, bootError: this.bootError, pauseReason: state.run?.frame.pauseReason ?? null,
       touch: state.run?.input.readTouch() ?? null, floatingCenter: this.floatingCenter ? Object.freeze({ ...this.floatingCenter }) : null,
       viewport: frozenCopy(this.viewport), layout: frozenCopy(this.layout), audio: this.audio.read(), images: this.images.count,
       widgets: Object.freeze(this.ui.widgets.map(w => Object.freeze({ id: w.id, rect: Object.freeze({ ...w.rect }), disabled: w.disabled }))),

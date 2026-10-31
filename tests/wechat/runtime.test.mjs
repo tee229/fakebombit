@@ -15,6 +15,7 @@ async function launch(options = {}) {
   const frames = new Map(), listeners = new Map(), storage = options.storage ?? new Map(), audio = [];
   const failedImages = new Set(options.failedImages ?? []), delayedImages = new Map();
   const logs = [], copies = [], drawingCalls = [];
+  let privacyListener, privacyAgreed = false, privacyViews = 0;
   let viewport = { windowWidth: 844, windowHeight: 390, screenWidth: 844, screenHeight: 390, pixelRatio: 2,
     safeArea: { left: 44, top: 0, right: 800, bottom: 370, width: 756, height: 370 }, ...options.viewport };
   const drawing = new Proxy({}, { get: (_target, name) => name === 'measureText' ? text => ({ width: text.length * 8 })
@@ -52,7 +53,17 @@ async function launch(options = {}) {
       for (const event of ['Play', 'Pause', 'Stop', 'Error', 'Ended']) item[`on${event}`] = callback => events.set(event, callback);
       audio.push(item); return item;
     },
-    setClipboardData: option => { if (options.clipboardFailure) option.fail?.({ errMsg: 'setClipboardData:fail unsupported' }); else { copies.push(option.data); option.success?.(); } },
+    onNeedPrivacyAuthorization: listener => { privacyListener = listener; },
+    openPrivacyContract: option => { privacyViews++; option.success?.({}); },
+    setClipboardData: option => {
+      const copy = () => { if (options.clipboardFailure) option.fail?.({ errMsg: 'setClipboardData:fail unsupported' }); else { copies.push(option.data); option.success?.(); } };
+      if (!options.requirePrivacy || privacyAgreed) { copy(); return; }
+      if (!privacyListener) { option.fail?.({ errMsg: 'setClipboardData:fail please implement the privacy pop-up feature' }); return; }
+      privacyListener(result => {
+        if (result.event === 'agree') { privacyAgreed = true; copy(); }
+        else if (result.event === 'disagree') option.fail?.({ errMsg: 'setClipboardData:fail privacy permission is not authorized' });
+      }, { referrer: 'setClipboardData' });
+    },
   };
   for (const event of ['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize', 'AudioInterruptionBegin', 'AudioInterruptionEnd', 'KeyDown', 'KeyUp', 'Error', 'UnhandledRejection']) wx[`on${event}`] = callback => listeners.set(event, callback);
   const context = createContext({ wx, GameGlobal: {}, setTimeout, clearTimeout, queueMicrotask,
@@ -74,7 +85,7 @@ async function launch(options = {}) {
   const tap = async id => { const r = widget(id), x = r.x + r.width / 2, y = r.y + r.height / 2; touch('TouchStart', 99, x, y); step(); touch('TouchEnd', 99, x, y); await settle(); };
   const key = async code => { listeners.get('KeyDown')?.({ code, key: code, timeStamp: now }); listeners.get('KeyUp')?.({ code, key: code, timeStamp: now }); await settle(); };
   await settle();
-  return { read, step, settle, touch, tap, key, widget, storage, audio, logs, copies, drawingCalls, failedImages, delayedImages,
+  return { read, step, settle, touch, tap, key, widget, storage, audio, logs, copies, drawingCalls, failedImages, delayedImages, privacyViews: () => privacyViews,
     event: (name, data = {}) => listeners.get(name)?.(data), resize: value => { viewport = value; listeners.get('WindowResize')?.({}); },
   };
 }
@@ -251,4 +262,24 @@ test('short screens can export reports and missing launch parameters can enable 
   const failed = await launch({ clipboardFailure: true }); await failed.tap('start'); await failed.tap('settings'); await failed.tap('report-settings');
   assert.equal(failed.read().reportExport.state, 'failed'); assert.match(failed.read().reportExport.error, /unsupported/);
   assert.equal(failed.copies.length, 0); assert.equal(failed.read().errors.length, 0);
+});
+
+test('report privacy consent waits for the player, opens the contract and honors agree or decline', async () => {
+  for (const choice of ['agree', 'decline']) {
+    const viewport = choice === 'decline' ? { windowWidth: 750, windowHeight: 280, screenWidth: 750, screenHeight: 280, pixelRatio: 2,
+      safeArea: { left: 24, top: 0, right: 726, bottom: 260, width: 702, height: 260 } } : undefined;
+    const app = await launch({ requirePrivacy: true, viewport }); await app.tap('start'); await app.tap('settings'); await app.tap('report-settings');
+    const tick = app.read().tick;
+    assert.equal(app.read().privacyOpen, true); assert.equal(app.copies.length, 0);
+    for (const id of ['privacy-contract', 'privacy-decline', 'privacy-agree']) {
+      const rect = app.widget(id), safe = app.read().viewport.safe;
+      assert.ok(rect.y >= safe.y && rect.y + rect.height <= safe.y + safe.height);
+    }
+    app.step(10); await app.key('Enter'); assert.equal(app.copies.length, 0); assert.equal(app.read().tick, tick);
+    await app.tap('privacy-contract'); assert.equal(app.privacyViews(), 1); assert.equal(app.read().privacyOpen, true);
+    await app.tap(`privacy-${choice}`); assert.equal(app.read().privacyOpen, false);
+    assert.equal(app.copies.length, choice === 'agree' ? 1 : 0);
+    assert.equal(app.read().reportExport.state, choice === 'agree' ? 'copied' : 'cancelled');
+    assert.equal(app.read().phase, 'paused'); assert.equal(app.read().errors.length, 0);
+  }
 });

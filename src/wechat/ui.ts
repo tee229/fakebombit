@@ -18,12 +18,14 @@ export interface Actions {
   settings(): void; closeSettings(): void; appearance(): void; entities(): void;
   updateSettings(patch: Partial<Omit<Settings, 'controls'>>, controls?: Partial<Settings['controls']>): void;
   resetControls(): void; report(): void; retryBoot(): void;
+  privacyAgree(): void; privacyDecline(): void; privacyContract(): void;
 }
 export interface Model {
   state: GameFlowState<WechatMinigame.Image>; settings: Readonly<Settings>; layout: Layout; viewport: Viewport;
   settingsOpen: boolean; booting: boolean; bootError: string; notice: string; entities: boolean; reportAvailable: boolean;
   touch: { joystickActive: boolean; knob: { x: number; y: number }; bombHeld: boolean }; floatingCenter: Circle | null;
   effects: readonly FeedbackEffect[];
+  privacyOpen: boolean; privacyError: string;
 }
 export class NativeUI {
   widgets: Widget[] = [];
@@ -72,12 +74,27 @@ export class NativeUI {
       else this.preparing(model.state.error?.message || '', false);
     } else this.hud();
     if (model.settingsOpen) this.settings();
-    if (model.notice) {
+    if (model.privacyOpen) this.privacy();
+    if (model.notice && !model.privacyOpen) {
       const s = model.layout.safe;
       const top = s.y + s.height - (model.settingsOpen ? 106 : 48);
       this.panel({ x: s.x + (s.width - Math.min(520, s.width - 32)) / 2, y: top, width: Math.min(520, s.width - 32), height: 40 });
       this.text(model.notice, s.x + s.width / 2, top + 20, 13, this.colors.ink, 'center', false, s.width - 60);
     }
+  }
+  private privacy(): void {
+    this.widgets = []; this.scrollRegion = null; this.scrim();
+    const s = this.model.layout.safe, width = Math.min(450, s.width - 32), height = Math.min(248, s.height - 16);
+    const x = s.x + (s.width - width) / 2, y = s.y + (s.height - height) / 2;
+    this.panel({ x, y, width, height });
+    this.text('导出报告前确认', x + 24, y + 30, 22, this.colors.ink, 'left', true, width - 48);
+    this.text('复制报告需要使用剪贴板。', x + 24, y + 67, 14, this.colors.ink, 'left', false, width - 48);
+    this.text('报告仅由你主动复制，不会自动上传。', x + 24, y + 91, 13, this.colors.muted, 'left', false, width - 48);
+    this.button('privacy-contract', '查看隐私保护指引', { x: x + 24, y: y + 112, width: width - 48, height: 44 }, this.actions.privacyContract);
+    if (this.model.privacyError) this.text(this.model.privacyError, x + width / 2, y + 170, 12, this.colors.warning, 'center', false, width - 48);
+    const half = (width - 56) / 2;
+    this.button('privacy-decline', '暂不导出', { x: x + 24, y: y + height - 64, width: half, height: 48 }, this.actions.privacyDecline);
+    this.button('privacy-agree', '同意并复制', { x: x + 32 + half, y: y + height - 64, width: half, height: 48 }, this.actions.privacyAgree, true);
   }
   drawBackground(context: CanvasRenderingContext2D, viewport: Viewport, mode: Settings['appearance'], menu: boolean): void {
     context.fillStyle = palettes[mode].background; context.fillRect(0, 0, viewport.width, viewport.height);

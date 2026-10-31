@@ -1,0 +1,16 @@
+{
+  "evidence": "actual-devtools-runtime-callback",
+  "phase": "paused",
+  "privacyOpen": true,
+  "reportExport": {
+    "state": "copying",
+    "error": ""
+  },
+  "errors": [],
+  "widgets": [
+    "privacy-contract",
+    "privacy-decline",
+    "privacy-agree"
+  ],
+  "userChoiceOperated": false
+}
