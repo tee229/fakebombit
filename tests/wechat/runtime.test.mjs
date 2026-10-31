@@ -11,7 +11,7 @@ import { createMatch } from '../../dist/match/index.js';
 const root = resolve('dist/wechat');
 const plain = value => JSON.parse(JSON.stringify(value));
 async function launch(options = {}) {
-  let now = 0, sequence = 0;
+  let now = 0, sequence = 0, performanceReads = 0;
   const frames = new Map(), listeners = new Map(), storage = options.storage ?? new Map(), audio = [];
   const failedImages = new Set(options.failedImages ?? []), delayedImages = new Map();
   const logs = [], copies = [], drawingCalls = [];
@@ -40,7 +40,7 @@ async function launch(options = {}) {
     setStorageSync: (key, value) => { if (options.badStorage) throw Error('unavailable'); storage.set(key, plain(value)); },
     getWindowInfo: () => viewport,
     getMenuButtonBoundingClientRect: () => ({ left: viewport.windowWidth - 100, top: 10, width: 90, height: 32 }),
-    getPerformance: () => ({ now: () => now }),
+    getPerformance: () => ({ now: () => now * 1000 + performanceReads++ * (options.performanceReadStepUs ?? 0) }),
     getDeviceInfo: () => ({ model: 'test host', platform: 'devtools', system: 'test' }),
     getAppBaseInfo: () => ({ SDKVersion: '3.17.6' }),
     getLaunchOptionsSync: () => ({ query: { acceptance: '1', seed: 'issue16-baseline-c', ...options.query } }),
@@ -282,4 +282,13 @@ test('report privacy consent waits for the player, opens the contract and honors
     assert.equal(app.read().reportExport.state, choice === 'agree' ? 'copied' : 'cancelled');
     assert.equal(app.read().phase, 'paused'); assert.equal(app.read().errors.length, 0);
   }
+});
+
+test('wx microsecond CPU clock is recorded in milliseconds without rescaling RAF frame intervals', async () => {
+  const app = await launch({ performanceReadStepUs: 250 }); await app.tap('start'); app.step(20);
+  await app.tap('settings'); await app.tap('report-settings');
+  const report = JSON.parse(app.copies.at(-1)), metrics = report.runs[0].performance;
+  assert.equal(metrics.averageLogicMs, .25); assert.equal(metrics.averagePresentationMs, .25);
+  assert.ok(metrics.qualification.averageFps > 59 && metrics.qualification.averageFps < 61);
+  assert.equal(report.timing.cpuClockUnit, 'us'); assert.equal(report.timing.cpuRecordedUnit, 'ms');
 });

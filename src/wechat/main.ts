@@ -63,7 +63,8 @@ class WechatGame {
     this.viewport = readViewport(host);
     this.preferences = new Preferences(host); this.layout = layoutFor(this.viewport, this.preferences.read().controls);
     this.images = new Images(host); this.audio = new NativeAudio(host);
-    const timer = host.getPerformance(); this.clock = () => timer.now();
+    // WeChat's high-resolution clock is in microseconds; all adapter durations use milliseconds.
+    const timer = host.getPerformance(); this.clock = () => timer.now() / 1000;
     const query = host.getLaunchOptionsSync().query ?? {};
     this.measuring = query.acceptance === '1';
     this.seed = typeof query.seed === 'string' && query.seed.length <= 200 ? query.seed : this.freshSeed();
@@ -300,6 +301,7 @@ class WechatGame {
     }
     if (!this.records.length) { this.notice = '记录已开启，请先开始一局再复制报告'; this.noticeUntil = this.clock() + 4500; return; }
     const report = { format: 'fakebombit-wechat-acceptance-v1', acceptanceStatus: 'awaiting-human-review', recordedAt: new Date().toISOString(),
+      timing: { frameRecordedUnit: 'ms', cpuClockUnit: 'us', cpuRecordedUnit: 'ms' },
       device: { ...this.host.getDeviceInfo(), ...this.host.getWindowInfo(), SDKVersion: this.host.getAppBaseInfo().SDKVersion, wechatVersion: this.host.getAppBaseInfo().version },
       runs: this.records.map(record => ({ id: record.id, seed: record.seed, initialization: record.initialization, theme: record.theme, skin: record.skin, settings: record.settings, performance: record.metrics.read() })), audio: this.audio.read(), errors: this.errors,
     };

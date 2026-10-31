@@ -1,0 +1,78 @@
+{
+  "scope": "desktop diagnostic; not phone qualification",
+  "environment": "Node v24.12.0 win32/x64",
+  "trace": true,
+  "baselineCommit": "dd3406d",
+  "fixtures": [
+    {
+      "seed": "mvwjl64d-10z4216-1",
+      "ticks": 4463,
+      "playerInput": "neutral",
+      "sha256Before": "c9044f7f02225f4352479c50d1f69f9a5891721a89addbaa703ac0f34c5d34e7",
+      "sha256After": "c9044f7f02225f4352479c50d1f69f9a5891721a89addbaa703ac0f34c5d34e7",
+      "before": {
+        "meanMs": 1.4138783329598916,
+        "p95Ms": 5.558999999999969,
+        "maxMs": 70.92100000000028,
+        "over33Ms": 63
+      },
+      "after": {
+        "meanMs": 1.0734381581895573,
+        "p95Ms": 3.9665999999999713,
+        "maxMs": 53.72869999999966,
+        "over33Ms": 42
+      }
+    },
+    {
+      "seed": "issue16-baseline-a",
+      "ticks": 3600,
+      "playerInput": "neutral",
+      "sha256Before": "1b65a113f16389239fccce3402b15588aa7044749fb96eb0aae981b095e4be55",
+      "sha256After": "1b65a113f16389239fccce3402b15588aa7044749fb96eb0aae981b095e4be55",
+      "before": {
+        "meanMs": 0.7892756944444428,
+        "p95Ms": 2.944900000000189,
+        "maxMs": 53.18799999999965
+      },
+      "after": {
+        "meanMs": 0.6596767777777778,
+        "p95Ms": 2.5682999999999083,
+        "maxMs": 42.23500000000013
+      }
+    },
+    {
+      "seed": "issue16-baseline-b",
+      "ticks": 3600,
+      "playerInput": "neutral",
+      "sha256Before": "0aa70e0d52007498ce6e7bfb86559da308416680a45692f5d4fe5f2547fb8660",
+      "sha256After": "0aa70e0d52007498ce6e7bfb86559da308416680a45692f5d4fe5f2547fb8660",
+      "before": {
+        "meanMs": 1.0630439166666694,
+        "p95Ms": 4.330799999999726,
+        "maxMs": 51.38909999999942
+      },
+      "after": {
+        "meanMs": 0.837142194444436,
+        "p95Ms": 3.1970000000001164,
+        "maxMs": 42.28259999999955
+      }
+    },
+    {
+      "seed": "issue16-baseline-c",
+      "ticks": 3600,
+      "playerInput": "neutral",
+      "sha256Before": "1a363442f51f8a08dc42f07f6ef08457f627adc6c5a7b973b0dfd29f56855997",
+      "sha256After": "1a363442f51f8a08dc42f07f6ef08457f627adc6c5a7b973b0dfd29f56855997",
+      "before": {
+        "meanMs": 1.3932554722222343,
+        "p95Ms": 4.822799999999916,
+        "maxMs": 100.64079999999922
+      },
+      "after": {
+        "meanMs": 1.101211750000002,
+        "p95Ms": 3.9078000000008615,
+        "maxMs": 77.97170000000006
+      }
+    }
+  ]
+}

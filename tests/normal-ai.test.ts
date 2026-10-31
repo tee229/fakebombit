@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { createHash } from 'node:crypto';
 import { createMatch, type GameplayEvent, type MatchConfig } from '../src/match/index.js';
 
 const config: MatchConfig = { seed: 'normal-ai-example',
@@ -8,6 +9,18 @@ const config: MatchConfig = { seed: 'normal-ai-example',
   actors: [{ id: 'player', type: 'actor', spawnId: 'player' }, { id: 'enemy', type: 'actor', spawnId: 'enemy', ai: { mode: 'normal' } }],
   rules: { tickRate: 10, speed: 3, bombFuseSeconds: 1, fireDurationSeconds: 0.2 },
 };
+
+test('phone performance seed retains every world and event through bounded searches and the final result', () => {
+  const match = createMatch({ seed: 'mvwjl64d-10z4216-1', generator: {}, playerId: 'player',
+    actors: ['player', 'target-1', 'target-2', 'target-3'].map(id => ({ id, type: 'actor' as const, spawnId: id,
+      ...(id === 'player' ? {} : { ai: { mode: 'normal' as const } }) })) });
+  const hash = createHash('sha256');
+  while (match.readWorld().tick < 4500 && !match.readWorld().result) {
+    const events = match.advanceTick([]); hash.update(JSON.stringify([match.readWorld(), events]));
+  }
+  expect(match.readWorld().tick).toBe(4463);
+  expect(hash.digest('hex')).toBe('c9044f7f02225f4352479c50d1f69f9a5891721a89addbaa703ac0f34c5d34e7');
+}, 15000);
 
 test('a normal AI bombs a nearby crate only after confirming an escape and survives its fire', () => {
   const match = createMatch(config);

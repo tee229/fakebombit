@@ -15,7 +15,18 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
     if (!world.blockers.some(wall => wall.type === 'solid-wall' && wall.x === x && wall.y === y)
       && safeToWait(world, forecast, { ...actor, position }, world.tick)) targets.push(position);
   }
-  const estimate = (position: Position) => targets.length ? Math.min(...targets.map(target => Math.abs(position.x - target.x) + Math.abs(position.y - target.y))) : 0;
+  const estimates = new Map<number, Map<number, number>>();
+  const estimate = (position: Position): number => {
+    if (!targets.length) return 0;
+    if (targets.length === 1) return Math.abs(position.x - targets[0]!.x) + Math.abs(position.y - targets[0]!.y);
+    let column = estimates.get(position.x);
+    const cached = column?.get(position.y); if (cached !== undefined) return cached;
+    let distance = Infinity;
+    for (const target of targets) distance = Math.min(distance, Math.abs(position.x - target.x) + Math.abs(position.y - target.y));
+    if (!column) { column = new Map(); estimates.set(position.x, column); }
+    column.set(position.y, distance);
+    return distance;
+  };
   const frontier = [{ index: 0, rank: estimate(actor.position) * world.initialization.rules.tickRate / actor.abilities.speed }];
   const seen = new Set<string>();
   const horizon = world.tick + Math.ceil(config.searchHorizonSeconds * world.initialization.rules.tickRate);

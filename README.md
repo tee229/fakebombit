@@ -1,6 +1,6 @@
 # Fake Bomb It
 
-原15项首版实施进度 **14/15**；2026-10-30用户接受Chrome性能已知限制并关闭#16/#19。#17微信小游戏完整移植已实现并在开发者工具运行，等待小游戏真机验收。浏览器明暗界面、触屏操作、背景音乐及iPad修复已获用户功能验收，原性能失败报告保留。小游戏构建和验收见[微信开发说明](docs/wechat-development.md)与[移植验证](docs/validation/issue-17-wechat-port.md)，完整清单见[实施进度](docs/implementation-status.md)。
+原15项首版实施进度 **14/15**；2026-10-30用户接受Chrome性能已知限制并关闭#16/#19。#17微信小游戏真机功能与报告复制已通过，首份性能报告未通过，优化候选等待手机复测；见[性能核对](docs/validation/issue-17-performance-2026-10-31.md)。浏览器明暗界面、触屏操作、背景音乐及iPad修复已获用户功能验收，原性能失败报告保留。小游戏构建和验收见[微信开发说明](docs/wechat-development.md)与[移植验证](docs/validation/issue-17-wechat-port.md)，完整清单见[实施进度](docs/implementation-status.md)。
 
 Issues #3–#11 implement headless movement, bombs, power-ups, normal AI battles and validated seeded semantic maps. It runs in Node without Phaser, a browser, artwork, system time, or uncontrolled randomness in the match module. The gameplay architecture is described in [issue #2](https://github.com/tee229/fakebombit/issues/2) and `docs/adr/`.
 

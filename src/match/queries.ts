@@ -1,11 +1,11 @@
-import type { ActorState, Direction, InitializationRecord, Position, SemanticMap, WorldState } from './index.js';
+import type { ActorState, Direction, InitializationRecord, Position, WorldState } from './index.js';
 import type { DangerForecast } from './forecast.js';
 import { indexCollisionMap, moveActor, moveAxis, overlapsCell, pathTouchesCell, vectors } from './motion.js';
 
 export type QueryWorld = Pick<WorldState, 'tick' | 'initialMap' | 'blockers' | 'bombs' | 'hazards' | 'result'>
   & { readonly initialization: Pick<InitializationRecord, 'rules'> };
 
-export function adjacentPassage(map: SemanticMap, cell: Position, direction: Direction, radius: number): Position | null {
+export function adjacentPassage(map: Parameters<typeof moveAxis>[3], cell: Position, direction: Direction, radius: number): Position | null {
   const vector = vectors[direction];
   const target = { x: cell.x + vector.x, y: cell.y + vector.y };
   const moved = moveAxis({ x: cell.x + 0.5, y: cell.y + 0.5 }, direction, 1, map, radius);
@@ -14,8 +14,10 @@ export function adjacentPassage(map: SemanticMap, cell: Position, direction: Dir
 
 /** One search owns derived movement facts; safety reuse never crosses a damage boundary. */
 export function createStepProjector(world: QueryWorld, forecast: DangerForecast) {
-  const movement = new Map<string, ReturnType<typeof moveActor> & { exitBombIds: readonly string[]; stateKey: string; safety: Map<number, boolean> }>();
-  const maps = new Map<string, { id: number; map: Parameters<typeof moveActor>[3] }>();
+  type CachedMove = ReturnType<typeof moveActor> & { exitBombIds: readonly string[]; stateKey: string; safety: Map<number, boolean> };
+  type Positions = Map<number, Map<number, Map<string, CachedMove>>>;
+  let movementCount = 0;
+  const maps = new Map<string, { map: Parameters<typeof moveActor>[3]; movement: Positions }>();
   const permissionKeys = new WeakMap<readonly string[], string>();
   // An edge checks its path at tick and its endpoint at tick + 1. Both sides
   // of every start/end boundary must therefore split the safety cache.
@@ -32,18 +34,25 @@ export function createStepProjector(world: QueryWorld, forecast: DangerForecast)
     const mapKey = `${phase.tick}:${permissionKey}`;
     let entry = maps.get(mapKey);
     if (!entry) {
-      entry = { id: maps.size, map: indexCollisionMap({ ...world.initialMap, blockers: [...phase.blockers, ...phase.bombs.filter(bomb => !exitBombIds.includes(bomb.id))] }) };
+      entry = { map: indexCollisionMap({ ...world.initialMap, blockers: [...phase.blockers, ...phase.bombs.filter(bomb => !exitBombIds.includes(bomb.id))] }), movement: new Map() };
       maps.set(mapKey, entry);
     }
-    const key = `${entry.id}:${actor.position.x}:${actor.position.y}:${actor.heading}:${actor.abilities.speed}:${direction}`;
-    let moved = movement.get(key);
+    // Numeric position keys retain exact coordinates without repeatedly formatting long floating values.
+    const key = `${actor.heading}:${actor.abilities.speed}:${direction}`;
+    let moved = entry.movement.get(actor.position.x)?.get(actor.position.y)?.get(key);
     if (!moved) {
       const outcome = direction === null ? { position: actor.position, heading: null, path: [actor.position] }
         : moveActor(actor, direction, { ...rules, speed: actor.abilities.speed }, entry.map);
       const remaining = exitBombIds.filter(id => phase.bombs.some(bomb => bomb.id === id && overlapsCell(outcome.position, bomb, rules.radius)));
       moved = { ...outcome, exitBombIds: remaining, safety: new Map(),
         stateKey: `${outcome.position.x.toFixed(9)},${outcome.position.y.toFixed(9)}:${outcome.heading}:${remaining.join(',')}` };
-      if (movement.size < 8192) movement.set(key, moved);
+      if (movementCount < 8192) {
+        let column = entry.movement.get(actor.position.x);
+        if (!column) { column = new Map(); entry.movement.set(actor.position.x, column); }
+        let states = column.get(actor.position.y);
+        if (!states) { states = new Map(); column.set(actor.position.y, states); }
+        states.set(key, moved); movementCount++;
+      }
     }
     const damagePhase = damagePhases.findLastIndex(phase => phase.tick <= tick);
     let safe = moved.safety.get(damagePhase);
