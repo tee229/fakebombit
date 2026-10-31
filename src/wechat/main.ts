@@ -51,9 +51,10 @@ class WechatGame {
   private frameHandle: number | null = null;
   private readonly errors: string[] = [];
   private readonly clock: () => number;
-  private readonly measuring: boolean;
+  private measuring: boolean;
   private notice = '';
   private noticeUntil = 0;
+  private reportExport: { state: 'idle' | 'copying' | 'copied' | 'failed'; error: string } = { state: 'idle', error: '' };
   private readonly records: { id: number; seed: string; initialization: GameRun<WechatMinigame.Image>['frame']['world']['initialization']; theme: string; skin: string; settings: Readonly<Settings>; metrics: Metrics }[] = [];
   constructor(private readonly host: WechatMinigame.Wx) {
     this.viewport = readViewport(host);
@@ -108,14 +109,15 @@ class WechatGame {
     this.audio.begin(run.theme.id);
     const board = new MatchBoard(this.host, run.frame.world, run.theme);
     this.live = { id: run.id, board };
-    if (this.measuring) {
-      this.records.push({ id: run.id, seed: run.frame.world.initialization.seed, initialization: run.frame.world.initialization,
-        theme: run.theme.id, skin: run.theme.package.skin?.id ?? '', settings: this.preferences.read(), metrics: createPerformanceRecord() });
-      if (this.records.length > 12) this.records.shift();
-    }
+    if (this.measuring) this.recordRun(run);
     return { pause: () => this.audio.stopEffects(), resume: () => { this.lastTime = null; },
       dispose: () => { board.dispose(); this.audio.endRun(); this.clearInput(); this.live = null; },
     };
+  }
+  private recordRun(run: GameRun<WechatMinigame.Image>): void {
+    this.records.push({ id: run.id, seed: run.frame.world.initialization.seed, initialization: run.frame.world.initialization,
+      theme: run.theme.id, skin: run.theme.package.skin?.id ?? '', settings: this.preferences.read(), metrics: createPerformanceRecord() });
+    if (this.records.length > 12) this.records.shift();
   }
   private recordError(message: string): void { if (this.errors.length < 24) this.errors.push(message); console.error('[FBI_WECHAT_ERROR]', message); }
   private relayout(): void { this.releaseGameplay(); this.layout = layoutFor(this.viewport, this.preferences.read().controls); }
@@ -274,17 +276,31 @@ class WechatGame {
   private keyUp = (event: WechatMinigame.OnKeyDownListenerResult): void => { this.keys.delete(event.code); this.flow.read().run?.input.keyUp(event.code); };
   private report(): void {
     this.pause();
+    if (!this.measuring) {
+      this.measuring = true;
+      const run = this.flow.read().run; if (run) this.recordRun(run);
+      this.notice = '验收记录已开启，请新开一局并连续游玩60秒'; this.noticeUntil = this.clock() + 6500;
+      return;
+    }
+    if (!this.records.length) { this.notice = '记录已开启，请先开始一局再复制报告'; this.noticeUntil = this.clock() + 4500; return; }
     const report = { format: 'fakebombit-wechat-acceptance-v1', acceptanceStatus: 'awaiting-human-review', recordedAt: new Date().toISOString(),
-      device: { ...this.host.getDeviceInfo(), ...this.host.getWindowInfo(), SDKVersion: this.host.getAppBaseInfo().SDKVersion },
+      device: { ...this.host.getDeviceInfo(), ...this.host.getWindowInfo(), SDKVersion: this.host.getAppBaseInfo().SDKVersion, wechatVersion: this.host.getAppBaseInfo().version },
       runs: this.records.map(record => ({ id: record.id, seed: record.seed, initialization: record.initialization, theme: record.theme, skin: record.skin, settings: record.settings, performance: record.metrics.read() })), audio: this.audio.read(), errors: this.errors,
     };
-    this.host.setClipboardData({ data: JSON.stringify(report, null, 2), success: () => { this.notice = '验收报告已复制，可粘贴发送'; this.noticeUntil = this.clock() + 3500; }, fail: () => { this.notice = '复制失败，请重新操作'; this.noticeUntil = this.clock() + 3500; } });
+    this.reportExport = { state: 'copying', error: '' };
+    this.host.setClipboardData({ data: JSON.stringify(report, null, 2), success: () => {
+      this.reportExport = { state: 'copied', error: '' }; this.notice = '验收报告已复制，可粘贴发送'; this.noticeUntil = this.clock() + 3500;
+    }, fail: error => {
+      const message = error.errMsg || '请重新操作'; this.reportExport = { state: 'failed', error: message };
+      this.notice = message.includes('privacy') ? '复制被微信阻止，请先完善后台隐私声明' : `复制失败：${message.slice(0, 80)}`;
+      this.noticeUntil = this.clock() + 6500;
+    } });
   }
   snapshot() {
     const state = this.flow.read(), world = state.run?.frame.world;
     return Object.freeze({ format: 'fakebombit-wechat-runtime-v1', phase: state.phase, runId: state.run?.id ?? null, theme: state.selection.id, skin: state.selection.skin?.id ?? null,
       tick: world?.tick ?? 0, seed: world?.initialization.seed ?? this.seed, world: world ?? null, settings: this.preferences.read(), settingsOpen: this.settingsOpen, visible: this.visible,
-      entities: this.entities, booting: this.booting, bootError: this.bootError, pauseReason: state.run?.frame.pauseReason ?? null,
+      entities: this.entities, acceptance: this.measuring, reportExport: Object.freeze({ ...this.reportExport }), booting: this.booting, bootError: this.bootError, pauseReason: state.run?.frame.pauseReason ?? null,
       touch: state.run?.input.readTouch() ?? null, floatingCenter: this.floatingCenter ? Object.freeze({ ...this.floatingCenter }) : null,
       viewport: frozenCopy(this.viewport), layout: frozenCopy(this.layout), audio: this.audio.read(), images: this.images.count,
       widgets: Object.freeze(this.ui.widgets.map(w => Object.freeze({ id: w.id, rect: Object.freeze({ ...w.rect }), disabled: w.disabled }))),

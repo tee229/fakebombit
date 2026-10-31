@@ -52,7 +52,7 @@ async function launch(options = {}) {
       for (const event of ['Play', 'Pause', 'Stop', 'Error', 'Ended']) item[`on${event}`] = callback => events.set(event, callback);
       audio.push(item); return item;
     },
-    setClipboardData: option => { copies.push(option.data); option.success?.(); },
+    setClipboardData: option => { if (options.clipboardFailure) option.fail?.({ errMsg: 'setClipboardData:fail unsupported' }); else { copies.push(option.data); option.success?.(); } },
   };
   for (const event of ['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize', 'AudioInterruptionBegin', 'AudioInterruptionEnd', 'KeyDown', 'KeyUp', 'Error', 'UnhandledRejection']) wx[`on${event}`] = callback => listeners.set(event, callback);
   const context = createContext({ wx, GameGlobal: {}, setTimeout, clearTimeout, queueMicrotask,
@@ -232,4 +232,23 @@ test('short settings remain closable and vertical swipes over a button scroll wi
   const last = app.widget('reduced-motion'); assert.ok(last.height >= 44);
   await app.tap('reduced-motion'); assert.equal(app.read().settings.reducedMotion, true);
   await app.tap('close-settings'); assert.equal(app.read().settingsOpen, false);
+});
+
+test('short screens can export reports and missing launch parameters can enable recording from settings', async () => {
+  const viewport = { windowWidth: 750, windowHeight: 280, screenWidth: 750, screenHeight: 280, pixelRatio: 2,
+    safeArea: { left: 24, top: 0, right: 726, bottom: 260, width: 702, height: 260 } };
+  const app = await launch({ viewport }); await app.tap('start'); app.step(20);
+  await app.tap('settings'); await app.tap('close-settings');
+  await app.tap('report');
+  const report = JSON.parse(app.copies.at(-1));
+  assert.equal(report.format, 'fakebombit-wechat-acceptance-v1'); assert.ok(report.runs[0].performance.frames > 0);
+  assert.equal(app.read().reportExport.state, 'copied');
+  const manual = await launch({ viewport, query: { acceptance: '0' } });
+  await manual.tap('menu-settings'); await manual.tap('report-settings'); await manual.tap('close-settings');
+  await manual.tap('start'); manual.step(20); await manual.tap('settings'); await manual.tap('report-settings');
+  assert.ok(JSON.parse(manual.copies.at(-1)).runs[0].performance.frames > 0);
+  assert.equal(manual.read().phase, 'paused'); assert.equal(manual.read().errors.length, 0);
+  const failed = await launch({ clipboardFailure: true }); await failed.tap('start'); await failed.tap('settings'); await failed.tap('report-settings');
+  assert.equal(failed.read().reportExport.state, 'failed'); assert.match(failed.read().reportExport.error, /unsupported/);
+  assert.equal(failed.copies.length, 0); assert.equal(failed.read().errors.length, 0);
 });

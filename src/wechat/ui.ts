@@ -74,8 +74,9 @@ export class NativeUI {
     if (model.settingsOpen) this.settings();
     if (model.notice) {
       const s = model.layout.safe;
-      this.panel({ x: s.x + (s.width - Math.min(520, s.width - 32)) / 2, y: s.y + s.height - 48, width: Math.min(520, s.width - 32), height: 40 });
-      this.text(model.notice, s.x + s.width / 2, s.y + s.height - 28, 13, this.colors.ink, 'center', false, s.width - 60);
+      const top = s.y + s.height - (model.settingsOpen ? 106 : 48);
+      this.panel({ x: s.x + (s.width - Math.min(520, s.width - 32)) / 2, y: top, width: Math.min(520, s.width - 32), height: 40 });
+      this.text(model.notice, s.x + s.width / 2, top + 20, 13, this.colors.ink, 'center', false, s.width - 60);
     }
   }
   drawBackground(context: CanvasRenderingContext2D, viewport: Viewport, mode: Settings['appearance'], menu: boolean): void {
@@ -169,16 +170,16 @@ export class NativeUI {
     const height = Math.min(334, s.height - 16), y = s.y + (s.height - height) / 2;
     this.panel({ x, y, width, height });
     const title = result ? ({ won: '你赢了', lost: '被炸中了', draw: '时间到' }[result.outcome]) : '已暂停';
-    this.text(title, x + width / 2, y + 28, 26, this.colors.ink, 'center', true);
+    this.text(title, m.reportAvailable ? x + 24 : x + width / 2, y + 28, 26, this.colors.ink, m.reportAvailable ? 'left' : 'center', true, m.reportAvailable ? width - 144 : width - 32);
     const mainOffset = Math.min(77, height - 176);
-    if (mainOffset >= 68) this.text(result ? '重试本局保留地图，新开一局选择新种子' : '继续游戏后再开始计时', x + width / 2, y + 57, 13, this.colors.muted, 'center', false, width - 24);
+    if (mainOffset >= 68 && !m.reportAvailable) this.text(result ? '重试本局保留地图，新开一局选择新种子' : '继续游戏后再开始计时', x + width / 2, y + 57, 13, this.colors.muted, 'center', false, width - 24);
     const mainY = y + mainOffset, gap = 8, buttonH = 48;
     this.button(result ? 'retry-main' : 'resume', result ? '重试本局' : '继续游戏', { x: x + 24, y: mainY, width: width - 48, height: buttonH }, result ? this.actions.retry : this.actions.resume, true);
     this.button('retry', '重试', { x: x + 24, y: mainY + buttonH + gap, width: (width - 56) / 2, height: buttonH }, this.actions.retry, false, 'retry');
     this.button('new-match', '新开一局', { x: x + 32 + (width - 56) / 2, y: mainY + buttonH + gap, width: (width - 56) / 2, height: buttonH }, this.actions.newMatch);
     this.button('back-menu', '返回菜单', { x: x + 24, y: mainY + (buttonH + gap) * 2, width: (width - 56) / 2, height: buttonH }, this.actions.menu, false, 'home');
     this.button('pause-settings', '设置', { x: x + 32 + (width - 56) / 2, y: mainY + (buttonH + gap) * 2, width: (width - 56) / 2, height: buttonH }, this.actions.settings, false, 'settings');
-    if (m.reportAvailable && height >= 310) this.button('report', '复制验收报告', { x: x + 24, y: y + height - 55, width: width - 48, height: 44 }, this.actions.report);
+    if (m.reportAvailable) this.button('report', '复制报告', { x: x + width - 120, y: y + 8, width: 104, height: 44 }, this.actions.report);
   }
   private settings(): void {
     this.widgets = []; this.scrim();
@@ -238,7 +239,9 @@ export class NativeUI {
       this.text('边距从控件外缘量起', preview.x, preview.y + preview.height + 24, 12, this.colors.muted);
       if (m.settings.controls.mode === 'floating') this.text('浮动模式保留固定位置', preview.x, preview.y + preview.height + 45, 12, this.colors.muted);
     }
-    this.button('reset-controls', '恢复操作默认值', { x: x + categoryWidth + 20, y: y + height - 56, width: Math.min(200, content.width), height: 44 }, this.actions.resetControls);
+    const reportX = x + width - 224, resetX = x + categoryWidth + 20;
+    this.button('reset-controls', '恢复操作默认值', { x: resetX, y: y + height - 56, width: Math.min(200, reportX - resetX - 8), height: 44 }, this.actions.resetControls);
+    this.button('report-settings', m.reportAvailable ? '复制报告' : '开始验收', { x: reportX, y: y + height - 56, width: 104, height: 44 }, this.actions.report);
   }
   private slider(id: string, label: string, value: string, fraction: number, rect: Rect, slide: (fraction: number) => void, disabled = false): void {
     const ctx = this.context;
