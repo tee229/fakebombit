@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import ts from 'typescript';
 import { createMatch } from '../../dist/match/index.js';
 
 const root = resolve('dist/wechat');
@@ -86,7 +87,16 @@ test('generated package is bounded, sources and generated assets have verifiable
   }
   const total = directory => readdirSync(directory, { withFileTypes: true }).reduce((sum, f) => sum + (f.isDirectory() ? total(join(directory, f.name)) : readFileSync(join(directory, f.name)).length), 0);
   assert.ok(total(root) < 4 * 1024 * 1024);
-  assert.doesNotMatch(readFileSync(join(root, 'game.js'), 'utf8'), /document\.createElement|localStorage|from ['"]phaser|mcpServers|--token=/);
+  const code = readFileSync(join(root, 'game.js'), 'utf8');
+  assert.doesNotMatch(code, /document\.createElement|localStorage|from ['"]phaser|mcpServers|--token=/);
+  // The real preview packager rejects these ES2020 operators even when the simulator runs them.
+  const unsupported = [];
+  const visit = node => {
+    if (node.kind === ts.SyntaxKind.QuestionQuestionToken || node.kind === ts.SyntaxKind.QuestionDotToken) unsupported.push(`${ts.SyntaxKind[node.kind]} at ${node.pos}`);
+    ts.forEachChild(node, visit);
+  };
+  visit(ts.createSourceFile('game.js', code, ts.ScriptTarget.ES2019, true, ts.ScriptKind.JS));
+  assert.deepEqual(unsupported.slice(0, 5), [], 'generated syntax must pass the WeChat preview packager');
 });
 
 test('native host uses identical headless rules and can retry, choose skins/themes and create a new seed', async () => {
@@ -97,9 +107,9 @@ test('native host uses identical headless rules and can retry, choose skins/them
   for (let tick = 0; tick < state.tick; tick++) match.advanceTick([{ actorId: 'player', move: null, bomb: false }]);
   assert.deepEqual(state.world, plain(match.readWorld()));
   const initialization = state.world.initialization, id = state.runId;
-  await app.tap('pause'); await app.tap('retry'); state = app.read();
+  await app.tap('settings'); await app.tap('close-settings'); await app.tap('retry'); state = app.read();
   assert.equal(state.runId, id + 1); assert.deepEqual(state.world.initialization, initialization);
-  await app.tap('pause'); await app.tap('new-match'); assert.equal(app.read().phase, 'menu'); assert.notEqual(app.read().seed, initialization.seed);
+  await app.tap('settings'); await app.tap('close-settings'); await app.tap('new-match'); assert.equal(app.read().phase, 'menu'); assert.notEqual(app.read().seed, initialization.seed);
   await app.tap('skin-mint'); await app.tap('theme-candy'); await app.tap('start'); assert.equal(app.read().skin, 'mint'); assert.equal(app.read().theme, 'candy');
 });
 
@@ -121,6 +131,9 @@ for (const mode of ['fixed', 'floating']) test(`${mode}: right-finger release pr
 
 test('settings pause, two audio channels persist, reset preserves audio/appearance and temporary geometry never rewrites preferences', async () => {
   const app = await launch(); await app.tap('start'); await app.tap('settings'); const tick = app.read().tick;
+  const runId = app.read().runId;
+  await app.tap('tab-effects'); await app.tap('entities-settings'); assert.equal(app.read().entities, true);
+  await app.tap('entities-settings'); assert.equal(app.read().entities, false); assert.equal(app.read().runId, runId); assert.equal(app.read().tick, tick);
   await app.tap('tab-audio');
   for (const id of ['music-volume', 'sound-volume']) { const r = app.widget(id); app.touch('TouchStart', 3, r.x + 12, r.y + 38); app.touch('TouchEnd', 3, r.x + 12, r.y + 38); await app.settle(); }
   assert.equal(app.read().settings.musicVolume, 0); assert.equal(app.read().settings.volume, 0);
@@ -197,7 +210,13 @@ test('phone and tablet layouts keep both right cards below the capsule-aware too
     assert.ok(l.cardY >= l.toolbarY + 48, `${width}: card clears toolbar`);
     assert.ok(l.joystick.y - l.joystick.radius >= l.cardY + 2 * l.cardHeight + 6, `${width}: joystick clears cards`);
     assert.ok(l.bomb.y + l.bomb.radius <= l.safe.y + l.safe.height, `${width}: bomb inside safe area`);
-    await app.tap('menu-settings');
+    await app.tap('start');
+    assert.deepEqual(app.read().widgets.map(widget => widget.id), ['settings', 'appearance']);
+    for (const id of ['settings', 'appearance']) {
+      const r = app.widget(id);
+      assert.ok(r.x >= l.board.x + l.board.width, `${width}: ${id} clears map`);
+    }
+    await app.tap('settings');
     const done = app.widget('close-settings'), capsule = app.read().viewport.capsule;
     assert.ok(!capsule || done.y >= capsule.y + capsule.height || done.x + done.width <= capsule.x, `${width}: settings completion clears native capsule`);
   }

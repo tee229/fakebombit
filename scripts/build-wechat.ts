@@ -53,7 +53,8 @@ for (const [name, file] of Object.entries(icons)) for (const [mode, color] of [[
     sourceSha256: hash(readFileSync(source)), outputSha256: hash(readFileSync(join(output, target))) });
 }
 await build({ configFile: false, publicDir: false, logLevel: 'warn',
-  build: { outDir: output, emptyOutDir: false, target: 'es2020', minify: true,
+  // The device-preview packager rejects optional chaining/nullish operators that its simulator accepts.
+  build: { outDir: output, emptyOutDir: false, target: 'es2019', minify: true,
     lib: { entry: join(root, 'src/wechat/main.ts'), formats: ['cjs'], fileName: () => 'game.js' },
   },
 });

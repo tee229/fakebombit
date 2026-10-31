@@ -76,7 +76,7 @@ class WechatGame {
     this.ui = new NativeUI(this.images, {
       start: () => { this.clearInput(); void this.flow.start(); }, retry: () => { this.closeSettings(); this.clearInput(); void this.flow.retry(); },
       newMatch: () => { this.closeSettings(); this.clearInput(); this.flow.newMatch(); }, menu: () => { this.closeSettings(); this.clearInput(); this.flow.returnToMenu(); },
-      pause: () => this.pause(), resume: () => this.resume(),
+      resume: () => this.resume(),
       selectTheme: index => { this.flow.select(withSkin(builtinThemes[index]!, this.flow.read().selection.skin ?? builtinSkins[0])); },
       selectSkin: index => { this.flow.select(withSkin(builtinThemes.find(t => t.id === this.flow.read().selection.id) ?? builtinThemes[0], builtinSkins[index]!)); },
       settings: () => { this.pause(); this.settingsOpen = true; }, closeSettings: () => this.closeSettings(),

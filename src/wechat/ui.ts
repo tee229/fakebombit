@@ -13,7 +13,7 @@ export const palettes = {
 };
 export interface Widget { id: string; rect: Rect; disabled: boolean; action?: () => void; slide?: (fraction: number) => void; track?: Rect }
 export interface Actions {
-  start(): void; retry(): void; newMatch(): void; menu(): void; pause(): void; resume(): void;
+  start(): void; retry(): void; newMatch(): void; menu(): void; resume(): void;
   selectTheme(index: number): void; selectSkin(index: number): void;
   settings(): void; closeSettings(): void; appearance(): void; entities(): void;
   updateSettings(patch: Partial<Omit<Settings, 'controls'>>, controls?: Partial<Settings['controls']>): void;
@@ -141,8 +141,8 @@ export class NativeUI {
       this.context.restore();
     }
     if (m.state.phase === 'playing') {
-      const entries: [string, IconName, () => void][] = [['pause', 'pause', this.actions.pause], ['settings', 'settings', this.actions.settings], ['appearance', m.settings.appearance === 'dark' ? 'sun' : 'moon', this.actions.appearance], ['entities', 'layers', this.actions.entities]];
-      entries.forEach(([id, icon, action], index) => this.button(id, '', { x: l.toolbarX + index * 48, y: l.toolbarY, width: 44, height: 44 }, action, false, icon, false, id === 'entities' && m.entities));
+      const entries: [string, IconName, () => void][] = [['settings', 'settings', this.actions.settings], ['appearance', m.settings.appearance === 'dark' ? 'sun' : 'moon', this.actions.appearance]];
+      entries.forEach(([id, icon, action], index) => this.button(id, '', { x: l.toolbarX + index * 48, y: l.toolbarY, width: 44, height: 44 }, action, false, icon));
       this.controls();
     }
     this.text(`种子 ${world.initialization.seed}`, l.safe.x + l.safe.width / 2, l.safe.y + l.safe.height - 7, 10, c.muted, 'center', false, Math.max(160, l.board.width));
@@ -194,7 +194,7 @@ export class NativeUI {
     const content = { x: x + categoryWidth + 20, y: y + 64, width: width - categoryWidth - previewWidth - 44, height: height - 126 };
     this.scrollRegion = content;
     const rowHeight = 56;
-    const total = this.tab === 'controls' ? rowHeight * 5 + 12 : this.tab === 'audio' ? rowHeight * 2 + 36 : rowHeight * 3;
+    const total = this.tab === 'controls' ? rowHeight * 5 + 12 : this.tab === 'audio' ? rowHeight * 2 + 36 : rowHeight * (m.state.run ? 4 : 3);
     this.scrollMax = Math.max(0, total - content.height); this.scroll = Math.min(this.scrollMax, Math.max(0, this.scroll));
     this.context.save(); this.context.beginPath(); this.context.rect(content.x, content.y, content.width, content.height); this.context.clip();
     const fieldsStart = this.widgets.length;
@@ -217,6 +217,7 @@ export class NativeUI {
       this.button('appearance-settings', m.settings.appearance === 'dark' ? '明暗外观：暗色' : '明暗外观：亮色', { x: content.x, y: top, width: content.width, height: 48 }, this.actions.appearance);
       this.button('particles', `粒子：${m.settings.particleBudget === 96 ? '丰富' : m.settings.particleBudget === 32 ? '精简' : '关闭'}`, { x: content.x, y: top + rowHeight, width: content.width, height: 48 }, () => this.actions.updateSettings({ particleBudget: m.settings.particleBudget === 96 ? 32 : m.settings.particleBudget === 32 ? 0 : 96 }));
       this.button('reduced-motion', `减少动态效果：${m.settings.reducedMotion ? '开' : '关'}`, { x: content.x, y: top + rowHeight * 2, width: content.width, height: 48 }, () => this.actions.updateSettings({ reducedMotion: !m.settings.reducedMotion }));
+      if (m.state.run) this.button('entities-settings', `图层：${m.entities ? '实体视图' : '正常视图'}`, { x: content.x, y: top + rowHeight * 3, width: content.width, height: 48 }, this.actions.entities, false, 'layers', false, m.entities);
     }
     this.context.restore();
     // Keep cropped rows out of hit testing, including partially visible slider hit areas.

@@ -35,7 +35,7 @@ export function layoutFor(viewport: Viewport, preferences: Controls): Layout {
   const joystick = { x: s.x + radius + actual.joystickLeft, y: s.y + s.height - radius - actual.joystickBottom, radius };
   const bomb = { x: s.x + s.width - radius - actual.bombRight, y: s.y + s.height - radius - actual.bombBottom, radius };
   return { safe: s, board, wing, portrait, joystick, bomb, floating: { x: s.x, y: controlTop, width: portrait ? s.width / 2 - 8 : board.x - s.x - 8, height: Math.max(0, s.y + s.height - controlTop) },
-    cardLeft, cardRight, cardY, cardWidth, cardHeight, actual, maximum, toolbarY, toolbarX: s.x + s.width - 8 - 4 * 48 };
+    cardLeft, cardRight, cardY, cardWidth, cardHeight, actual, maximum, toolbarY, toolbarX: s.x + s.width - 8 - 2 * 48 };
 }
 export const contains = (rect: Rect, x: number, y: number): boolean => x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
 export const inCircle = (circle: Circle, x: number, y: number): boolean => Math.hypot(x - circle.x, y - circle.y) <= circle.radius;
