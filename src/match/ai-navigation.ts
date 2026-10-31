@@ -1,11 +1,15 @@
 import type { ActorState, Direction, Position, WorldState } from './index.js';
 import { forecastDanger } from './forecast.js';
-import { createStepProjector, safeToWait } from './queries.js';
+import { createStepProjector, createWaitChecker } from './queries.js';
 import type { EscapeAiConfig } from './escape-ai.js';
 
 /** Bounded goal-directed search; every edge is a real logical movement step. */
 export function findRoute(world: WorldState, actor: ActorState, goal: Position | null, config: Pick<EscapeAiConfig, 'maxSearchStates' | 'searchHorizonSeconds'>) {
   const forecast = forecastDanger(world);
+  const canWait = createWaitChecker(world, forecast);
+  // A safe escape query has no route to build. Preserve the root result while
+  // avoiding a complete target-grid scan on every ordinary AI decision.
+  if (!goal && canWait(actor.position, world.tick)) return { plan: [], searchedStates: 1, reached: true, exhausted: false };
   const projectStep = createStepProjector(world, forecast);
   type Node = { actor: ActorState; tick: number; exitBombIds: readonly string[]; parent: number; move: Direction | null };
   const nodes: Node[] = [{ actor, tick: world.tick, exitBombIds: world.bombs.filter(bomb => bomb.exitActorIds.includes(actor.id)).map(bomb => bomb.id), parent: -1, move: null }];
@@ -13,7 +17,7 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
   if (!goal) for (let y = 0; y < world.initialMap.height; y++) for (let x = 0; x < world.initialMap.width; x++) {
     const position = { x: x + 0.5, y: y + 0.5 };
     if (!world.blockers.some(wall => wall.type === 'solid-wall' && wall.x === x && wall.y === y)
-      && safeToWait(world, forecast, { ...actor, position }, world.tick)) targets.push(position);
+      && canWait(position, world.tick)) targets.push(position);
   }
   const estimates = new Map<number, Map<number, number>>();
   const estimate = (position: Position): number => {
@@ -28,7 +32,7 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
     return distance;
   };
   const frontier = [{ index: 0, rank: estimate(actor.position) * world.initialization.rules.tickRate / actor.abilities.speed }];
-  const seen = new Set<string>();
+  const seen = new Map<number, Set<string>>();
   const horizon = world.tick + Math.ceil(config.searchHorizonSeconds * world.initialization.rules.tickRate);
   let best = 0;
   let exhausted = false;
@@ -40,7 +44,7 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
   while (frontier.length) {
     const index = frontier.shift()!.index;
     const node = nodes[index]!;
-    if (safeToWait(world, forecast, node.actor, node.tick)) {
+    if (canWait(node.actor.position, node.tick)) {
       if (!goal || (Math.floor(node.actor.position.x) === goal.x && Math.floor(node.actor.position.y) === goal.y)) return finish(index, true);
       if (estimate(node.actor.position) < estimate(nodes[best]!.actor.position)) best = index;
     }
@@ -51,9 +55,10 @@ export function findRoute(world: WorldState, actor: ActorState, goal: Position |
       if (direction === null && forecast.windows.length === 0) continue;
       const next = projectStep(node.actor, direction, node.tick, node.exitBombIds);
       if (!next.safe || (direction !== null && next.actor.position.x === node.actor.position.x && next.actor.position.y === node.actor.position.y)) continue;
-      const key = `${node.tick + 1}:${next.stateKey}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
+      let visited = seen.get(node.tick + 1);
+      if (visited?.has(next.stateKey)) continue;
+      if (!visited) { visited = new Set(); seen.set(node.tick + 1, visited); }
+      visited.add(next.stateKey);
       if (nodes.length >= config.maxSearchStates) { exhausted = true; break; }
       const nextIndex = nodes.length;
       nodes.push({ ...next, tick: node.tick + 1, parent: index, move: direction });

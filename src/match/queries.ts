@@ -71,3 +71,21 @@ export function safeToWait(world: QueryWorld, forecast: DangerForecast, actor: A
   return !forecast.windows.some(interval => interval.endTick > tick
     && interval.cells.some(cell => overlapsCell(actor.position, cell, world.initialization.rules.radius)));
 }
+
+/** Waiting is safe once every overlapping known danger window has expired. */
+export function createWaitChecker(world: QueryWorld, forecast: DangerForecast) {
+  const expiry = new Map<number, Map<number, number>>();
+  return (position: Position, tick: number): boolean => {
+    let column = expiry.get(position.x);
+    let until = column?.get(position.y);
+    if (until === undefined) {
+      until = -Infinity;
+      for (const interval of forecast.windows) if (interval.cells.some(cell => overlapsCell(position, cell, world.initialization.rules.radius))) {
+        until = Math.max(until, interval.endTick);
+      }
+      if (!column) { column = new Map(); expiry.set(position.x, column); }
+      column.set(position.y, until);
+    }
+    return tick >= until;
+  };
+}

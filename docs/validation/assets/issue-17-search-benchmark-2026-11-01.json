@@ -1,0 +1,325 @@
+{
+  "scope": "desktop diagnostic; scripted inputs are not the phone input replay",
+  "environment": "Node v24.12.0 win32/x64",
+  "baselineCommit": "71f0b1e2a1386820aa6fd925dc3116c1d7a10643",
+  "trace": "SHA-256 of every world and ordered event list",
+  "inputSchedule": {
+    "neutral": "no player intents",
+    "late-move-and-bomb": "neutral for first 3000 ticks, then the same schedule relative to tick 3000",
+    "move-and-bomb": "right/down/left/up each 47 ticks; bomb after tick 400 at multiples of 149"
+  },
+  "results": [
+    [
+      {
+        "version": "before",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "neutral",
+        "tickLimit": 4500,
+        "ticks": 4463,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 1.072132220479495,
+        "maxMs": 50.1217000000006,
+        "sha256": "c9044f7f02225f4352479c50d1f69f9a5891721a89addbaa703ac0f34c5d34e7"
+      },
+      {
+        "version": "after",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "neutral",
+        "tickLimit": 4500,
+        "ticks": 4463,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.6813939502576698,
+        "maxMs": 35.04659999999967,
+        "sha256": "c9044f7f02225f4352479c50d1f69f9a5891721a89addbaa703ac0f34c5d34e7"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "move-and-bomb",
+        "tickLimit": 4500,
+        "ticks": 627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.5462011164273859,
+        "maxMs": 6.785799999999654,
+        "sha256": "939df538521fa514bf8d71200a49db26daf1f9ed85779907c2bd6a8302c296a7"
+      },
+      {
+        "version": "after",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "move-and-bomb",
+        "tickLimit": 4500,
+        "ticks": 627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.21903413078152198,
+        "maxMs": 4.147699999999531,
+        "sha256": "939df538521fa514bf8d71200a49db26daf1f9ed85779907c2bd6a8302c296a7"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-a",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.6269932500000172,
+        "maxMs": 37.73840000000018,
+        "sha256": "1b65a113f16389239fccce3402b15588aa7044749fb96eb0aae981b095e4be55"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-a",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.36050661111113236,
+        "maxMs": 23.403599999999642,
+        "sha256": "1b65a113f16389239fccce3402b15588aa7044749fb96eb0aae981b095e4be55"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-a",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.601216108452979,
+        "maxMs": 10.03650000000016,
+        "sha256": "b066d339293843f4dbd612609ea52355d5b2d5883d95c86cc78cafe3e756b06c"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-a",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.24128133971291327,
+        "maxMs": 4.57339999999931,
+        "sha256": "b066d339293843f4dbd612609ea52355d5b2d5883d95c86cc78cafe3e756b06c"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-b",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.8037271944444354,
+        "maxMs": 39.39630000000034,
+        "sha256": "0aa70e0d52007498ce6e7bfb86559da308416680a45692f5d4fe5f2547fb8660"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-b",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.43799580555554307,
+        "maxMs": 27.10190000000148,
+        "sha256": "0aa70e0d52007498ce6e7bfb86559da308416680a45692f5d4fe5f2547fb8660"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-b",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 1249,
+        "movement": 973,
+        "placements": 3,
+        "meanMs": 0.4885659727782283,
+        "maxMs": 6.779500000000553,
+        "sha256": "b7be23cafcd4c5356d9df747374e514a96a73513d887d1a0225b4237c494f118"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-b",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 1249,
+        "movement": 973,
+        "placements": 3,
+        "meanMs": 0.19324211369094788,
+        "maxMs": 4.482200000002194,
+        "sha256": "b7be23cafcd4c5356d9df747374e514a96a73513d887d1a0225b4237c494f118"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-c",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 1.0928973611111532,
+        "maxMs": 89.77260000000024,
+        "sha256": "1a363442f51f8a08dc42f07f6ef08457f627adc6c5a7b973b0dfd29f56855997"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-c",
+        "input": "neutral",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 0,
+        "placements": 0,
+        "meanMs": 0.6449689722221683,
+        "maxMs": 45.87720000000263,
+        "sha256": "1a363442f51f8a08dc42f07f6ef08457f627adc6c5a7b973b0dfd29f56855997"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-c",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 627,
+        "movement": 204,
+        "placements": 1,
+        "meanMs": 0.5722135566188387,
+        "maxMs": 7.066599999998289,
+        "sha256": "4941cd61059df75ee869d18a0efe9250504a71378142f9527542ea9e334cdae1"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-c",
+        "input": "move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 627,
+        "movement": 204,
+        "placements": 1,
+        "meanMs": 0.24245087719300007,
+        "maxMs": 4.425599999998667,
+        "sha256": "4941cd61059df75ee869d18a0efe9250504a71378142f9527542ea9e334cdae1"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "late-move-and-bomb",
+        "tickLimit": 4500,
+        "ticks": 3627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.881983953680724,
+        "maxMs": 45.48439999999982,
+        "sha256": "a14938be0ac2f7d8d5d1e916eb46c528cbeb574de901853c9e73fc7d4b593c25"
+      },
+      {
+        "version": "after",
+        "seed": "mvwjl64d-10z4216-1",
+        "input": "late-move-and-bomb",
+        "tickLimit": 4500,
+        "ticks": 3627,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.5748836779707789,
+        "maxMs": 33.676800000000185,
+        "sha256": "a14938be0ac2f7d8d5d1e916eb46c528cbeb574de901853c9e73fc7d4b593c25"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-a",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.624649916666652,
+        "maxMs": 37.249799999999595,
+        "sha256": "cda0da0122aa2657681c3d72aeff4f1f02f5feda4a0932f20d240590e4363b62"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-a",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 167,
+        "placements": 1,
+        "meanMs": 0.3566924722222014,
+        "maxMs": 24.291299999998955,
+        "sha256": "cda0da0122aa2657681c3d72aeff4f1f02f5feda4a0932f20d240590e4363b62"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-b",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3423,
+        "movement": 346,
+        "placements": 0,
+        "meanMs": 0.8183736196319099,
+        "maxMs": 39.01629999999932,
+        "sha256": "7c606854f0f042294854f005ffae815a381da9fc1292f4893ef3b0f5c304d89d"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-b",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3423,
+        "movement": 346,
+        "placements": 0,
+        "meanMs": 0.44297052293307776,
+        "maxMs": 26.05079999999907,
+        "sha256": "7c606854f0f042294854f005ffae815a381da9fc1292f4893ef3b0f5c304d89d"
+      }
+    ],
+    [
+      {
+        "version": "before",
+        "seed": "issue16-baseline-c",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 598,
+        "placements": 1,
+        "meanMs": 1.0847056666667019,
+        "maxMs": 78.78329999999914,
+        "sha256": "5238b4d69a657cd8a05239d64b053eabc5535858b70150dea79c9b7838ccd412"
+      },
+      {
+        "version": "after",
+        "seed": "issue16-baseline-c",
+        "input": "late-move-and-bomb",
+        "tickLimit": 3600,
+        "ticks": 3600,
+        "movement": 598,
+        "placements": 1,
+        "meanMs": 0.6791935000000345,
+        "maxMs": 45.33950000000186,
+        "sha256": "5238b4d69a657cd8a05239d64b053eabc5535858b70150dea79c9b7838ccd412"
+      }
+    ]
+  ]
+}
